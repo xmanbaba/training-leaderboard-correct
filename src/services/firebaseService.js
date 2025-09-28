@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDoc,
@@ -12,6 +13,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  limit as firestoreLimit,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
@@ -25,9 +27,8 @@ import { collections, userRoles } from "../config/firestoreSchema";
 // ===============================
 // AUTHENTICATION SERVICES
 // ===============================
-
 export const authService = {
-  // Register new user
+  // Register new user (store doc at /users/{uid})
   async register(email, password, userData) {
     try {
       const userCredential = await createUserWithEmailAndPassword(
@@ -37,8 +38,8 @@ export const authService = {
       );
       const user = userCredential.user;
 
-      // Create user document in Firestore
-      await addDoc(collection(db, collections.USERS), {
+      // Create (or overwrite) user document with UID as doc ID.
+      await setDoc(doc(db, collections.USERS, user.uid), {
         uid: user.uid,
         email: user.email,
         displayName: userData.displayName || "",
@@ -85,7 +86,6 @@ export const authService = {
 // ===============================
 // TRAINING SERVICES
 // ===============================
-
 export const trainingService = {
   // Create new training
   async createTraining(trainingData) {
@@ -104,6 +104,7 @@ export const trainingService = {
   // Get training by ID
   async getTraining(trainingId) {
     try {
+      if (!trainingId) return null;
       const docSnap = await getDoc(doc(db, collections.TRAININGS, trainingId));
       if (docSnap.exists()) {
         return { id: docSnap.id, ...docSnap.data() };
@@ -114,19 +115,17 @@ export const trainingService = {
     }
   },
 
-  // Get trainings by trainer
+  // Get trainings by trainer (safe if trainerId missing)
   async getTrainingsByTrainer(trainerId) {
     try {
+      if (!trainerId) return []; // guard against undefined -> where(..., undefined)
       const q = query(
         collection(db, collections.TRAININGS),
         where("createdBy", "==", trainerId),
         orderBy("createdAt", "desc")
       );
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     } catch (error) {
       throw error;
     }
@@ -135,6 +134,7 @@ export const trainingService = {
   // Update training
   async updateTraining(trainingId, updates) {
     try {
+      if (!trainingId) throw new Error("trainingId is required");
       await updateDoc(doc(db, collections.TRAININGS, trainingId), {
         ...updates,
         updatedAt: serverTimestamp(),
@@ -146,6 +146,7 @@ export const trainingService = {
 
   // Listen to training changes
   onTrainingSnapshot(trainingId, callback) {
+    if (!trainingId) return () => {};
     return onSnapshot(doc(db, collections.TRAININGS, trainingId), callback);
   },
 };
@@ -153,7 +154,6 @@ export const trainingService = {
 // ===============================
 // PARTICIPANT SERVICES
 // ===============================
-
 export const participantService = {
   // Add participant to training
   async addParticipant(participantData) {
@@ -172,16 +172,14 @@ export const participantService = {
   // Get participants by training
   async getParticipantsByTraining(trainingId) {
     try {
+      if (!trainingId) return [];
       const q = query(
         collection(db, collections.PARTICIPANTS),
         where("trainingId", "==", trainingId),
         where("status", "==", "active")
       );
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     } catch (error) {
       throw error;
     }
@@ -190,6 +188,7 @@ export const participantService = {
   // Update participant
   async updateParticipant(participantId, updates) {
     try {
+      if (!participantId) throw new Error("participantId is required");
       await updateDoc(
         doc(db, collections.PARTICIPANTS, participantId),
         updates
@@ -199,8 +198,9 @@ export const participantService = {
     }
   },
 
-  // Listen to participants changes
+  // Listen to participants changes (returns no-op if no trainingId)
   onParticipantsSnapshot(trainingId, callback) {
+    if (!trainingId) return () => {};
     const q = query(
       collection(db, collections.PARTICIPANTS),
       where("trainingId", "==", trainingId),
@@ -213,7 +213,6 @@ export const participantService = {
 // ===============================
 // SCORING SERVICES
 // ===============================
-
 export const scoringService = {
   // Award score to participant
   async awardScore(scoreData) {
@@ -245,6 +244,7 @@ export const scoringService = {
   // Get scores for participant
   async getParticipantScores(participantId, trainingId) {
     try {
+      if (!participantId || !trainingId) return [];
       const q = query(
         collection(db, collections.SCORES),
         where("participantId", "==", participantId),
@@ -252,10 +252,7 @@ export const scoringService = {
         orderBy("timestamp", "desc")
       );
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     } catch (error) {
       throw error;
     }
@@ -264,16 +261,14 @@ export const scoringService = {
   // Get all scores for a training
   async getTrainingScores(trainingId) {
     try {
+      if (!trainingId) return [];
       const q = query(
         collection(db, collections.SCORES),
         where("trainingId", "==", trainingId),
         orderBy("timestamp", "desc")
       );
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     } catch (error) {
       throw error;
     }
@@ -281,6 +276,7 @@ export const scoringService = {
 
   // Listen to scores changes
   onScoresSnapshot(trainingId, callback) {
+    if (!trainingId) return () => {};
     const q = query(
       collection(db, collections.SCORES),
       where("trainingId", "==", trainingId),
@@ -293,34 +289,32 @@ export const scoringService = {
 // ===============================
 // ACTIVITY SERVICES
 // ===============================
-
 export const activityService = {
-  // Get recent activities for training
-  async getRecentActivities(trainingId, limit = 10) {
+  // Get recent activities for training (limitCount default 10)
+  async getRecentActivities(trainingId, limitCount = 10) {
     try {
+      if (!trainingId) return [];
       const q = query(
         collection(db, collections.ACTIVITIES),
         where("trainingId", "==", trainingId),
         orderBy("timestamp", "desc"),
-        limit(limit)
+        firestoreLimit(limitCount)
       );
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     } catch (error) {
       throw error;
     }
   },
 
   // Listen to activities changes
-  onActivitiesSnapshot(trainingId, callback, limit = 10) {
+  onActivitiesSnapshot(trainingId, callback, limitCount = 10) {
+    if (!trainingId) return () => {};
     const q = query(
       collection(db, collections.ACTIVITIES),
       where("trainingId", "==", trainingId),
       orderBy("timestamp", "desc"),
-      limit(limit)
+      firestoreLimit(limitCount)
     );
     return onSnapshot(q, callback);
   },
@@ -329,21 +323,15 @@ export const activityService = {
 // ===============================
 // USER SERVICES
 // ===============================
-
 export const userService = {
-  // Get user by ID
+  // Get user by UID (doc id == uid)
   async getUser(userId) {
     try {
-      const q = query(
-        collection(db, collections.USERS),
-        where("uid", "==", userId)
-      );
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        return {
-          id: querySnapshot.docs[0].id,
-          ...querySnapshot.docs[0].data(),
-        };
+      if (!userId) return null;
+      const docRef = doc(db, collections.USERS, userId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
       }
       return null;
     } catch (error) {
@@ -351,23 +339,15 @@ export const userService = {
     }
   },
 
-  // Update user
+  // Update user (doc id == uid)
   async updateUser(userId, updates) {
     try {
-      // First find the user document
-      const q = query(
-        collection(db, collections.USERS),
-        where("uid", "==", userId)
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const userDocId = querySnapshot.docs[0].id;
-        await updateDoc(doc(db, collections.USERS, userDocId), {
-          ...updates,
-          updatedAt: serverTimestamp(),
-        });
-      }
+      if (!userId) throw new Error("userId is required");
+      const userDocRef = doc(db, collections.USERS, userId);
+      await updateDoc(userDocRef, {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
     } catch (error) {
       throw error;
     }

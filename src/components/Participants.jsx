@@ -11,12 +11,17 @@ import {
   SlidersHorizontal,
   UserPlus,
 } from "lucide-react";
+import { ParticipantService } from "../services/participantService";
+import AddParticipantModal from "./AddParticipantModal";
 
-const Participants = ({ participants, mockGroups, calculateLevel }) => {
+
+const Participants = ({ participants, mockGroups, calculateLevel, selectedTraining, onParticipantAdded }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("all");
   const [sortBy, setSortBy] = useState("score");
   const [showFilters, setShowFilters] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const participantService = new ParticipantService();
 
   const departments = [...new Set(participants.map((p) => p.department))];
 
@@ -179,10 +184,19 @@ const Participants = ({ participants, mockGroups, calculateLevel }) => {
                 Manage training participants and track their progress
               </p>
             </div>
-            <button className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl hover:scale-105">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl hover:scale-105"
+            >
               <UserPlus className="h-5 w-5" />
               <span>Add Participant</span>
             </button>
+            <AddParticipantModal
+              isOpen={showAddModal}
+              onClose={() => setShowAddModal(false)}
+              trainingId={selectedTraining?.id}
+              onParticipantAdded={onParticipantAdded}
+            />
           </div>
         </div>
 

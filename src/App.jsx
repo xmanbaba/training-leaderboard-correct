@@ -11,6 +11,7 @@ import Leaderboard from "./components/Leaderboard";
 import QuickScoring from "./components/QuickScoring";
 import Participants from "./components/Participants";
 import Settings from "./components/Settings";
+import ParticipantJoin from "./components/ParticipantJoin"
 import {
   mockTrainings,
   mockParticipants,
@@ -90,6 +91,11 @@ const MainAppLayout = () => {
       })
     );
   };
+
+const handleParticipantAdded = (newParticipant) => {
+  setParticipants((prev) => [...prev, newParticipant]);
+};
+
 
   // Helper function to get sorted participants
   const getSortedParticipants = () => {
@@ -188,9 +194,12 @@ const MainAppLayout = () => {
                     participants={participants}
                     mockGroups={mockGroups}
                     calculateLevel={calculateLevel}
+                    selectedTraining={selectedTraining}
+                    onParticipantAdded={handleParticipantAdded}
                   />
                 }
               />
+              <Route path="/join/:joinCode" element={<ParticipantJoin />} />
               <Route
                 path="/settings"
                 element={

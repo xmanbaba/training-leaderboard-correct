@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, createContext, useContext } from "react";
 import {
   User,
   Plus,
@@ -9,6 +9,8 @@ import {
   Crown,
   Award,
 } from "lucide-react";
+import { ParticipantService } from "../services/participantService";
+import { useAuth } from "../contexts/AuthContext"; 
 
 const QuickScoring = ({
   participants,
@@ -18,37 +20,25 @@ const QuickScoring = ({
   calculateLevel,
 }) => {
   const [recentScores, setRecentScores] = useState([]);
-
-  const handleScoreUpdate = (
-    participantId,
-    categoryKey,
-    change,
-    isPositive
-  ) => {
-    updateParticipantScore(participantId, categoryKey, change);
-
-    // Add to recent scores for feedback
-    const participant = participants.find((p) => p.id === participantId);
-    const category = isPositive
-      ? scoringCategories.positive[categoryKey]
-      : scoringCategories.negative[categoryKey];
-
-    const recentScore = {
-      id: Date.now(),
-      participantName: participant.name,
-      categoryName: category.name,
-      change: change,
-      isPositive: change > 0,
-    };
-
-    setRecentScores((prev) => [recentScore, ...prev.slice(0, 4)]);
-
-    // Remove after animation
-    setTimeout(() => {
-      setRecentScores((prev) =>
-        prev.filter((score) => score.id !== recentScore.id)
+  const participantService = new ParticipantService();
+  const { user } = useAuth();
+  // Replace your score update function:
+  const handleScoreUpdate = async (participantId, category, changeAmount) => {
+    try {
+      if (!user) throw new Error("No user is logged in");
+      
+      await participantService.updateParticipantScore(
+        participantId,
+        category,
+        changeAmount,
+        user.uid,
+        "Manual scoring via Quick Scoring"
       );
-    }, 3000);
+      // Participants will update automatically via real-time listener
+    } catch (error) {
+      console.error("Failed to update score:", error);
+      // Show error toast
+    }
   };
 
   const ScoreButton = ({ onClick, disabled, type, children }) => (

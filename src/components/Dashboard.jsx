@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   BarChart3,
@@ -12,71 +12,133 @@ import {
   Activity,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { ParticipantService } from "../services/participantService";
+import { TrainingService } from "../services/trainingService";
+import AddParticipantModal from "./AddParticipantModal";
+import CreateTrainingModal from "./CreateTrainingModal";
 
-const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
+const Dashboard = ({ mockGroups, getSortedParticipants }) => {
   const { userProfile } = useAuth();
+
+  /* ---------- State ---------- */
+  const [participants, setParticipants] = useState([]);
+  const [trainings, setTrainings] = useState([]);
+  const [currentTraining, setCurrentTraining] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [recentActivities, setRecentActivities] = useState([]);
+
+  const participantService = new ParticipantService();
+  const trainingService = new TrainingService();
+
+  /* ---------- Load trainings ---------- */
+  useEffect(() => {
+    loadTrainings();
+  }, []);
+
+  /* ---------- Real-time participants ---------- */
+  useEffect(() => {
+    if (currentTraining) {
+      const unsubscribe = participantService.subscribeToTrainingParticipants(
+        currentTraining.id,
+        (updatedParticipants) => setParticipants(updatedParticipants)
+      );
+      return () => unsubscribe();
+    }
+  }, [currentTraining]);
+
+  /* ---------- Real-time activities (if available) ---------- */
+  useEffect(() => {
+    if (participantService.subscribeToRecentActivities && currentTraining) {
+      const unsubscribe = participantService.subscribeToRecentActivities(
+        currentTraining.id,
+        (activities) => setRecentActivities(activities)
+      );
+      return () => unsubscribe();
+    } else {
+      // fallback static mock
+      setRecentActivities([
+        {
+          id: 1,
+          message: "Sarah Johnson earned points",
+          detail: "Perfect attendance streak",
+          time: "2 min ago",
+          type: "positive",
+          points: 5,
+          participant: "Sarah Johnson",
+        },
+        {
+          id: 2,
+          message: "David Kim lost points",
+          detail: "Late arrival",
+          time: "5 min ago",
+          type: "negative",
+          points: -3,
+          participant: "David Kim",
+        },
+        {
+          id: 3,
+          message: "Team Alpha milestone",
+          detail: "Project completed successfully",
+          time: "10 min ago",
+          type: "achievement",
+          points: 10,
+          participant: "Team Alpha",
+        },
+        {
+          id: 4,
+          message: "Mike Chen achievement",
+          detail: "Question Master badge earned",
+          time: "15 min ago",
+          type: "badge",
+          points: 15,
+          participant: "Mike Chen",
+        },
+      ]);
+    }
+  }, [currentTraining]);
+
+  /* ---------- Helpers ---------- */
+  const loadTrainings = async () => {
+    try {
+      const userTrainings = await trainingService.getTrainerTrainings(
+        userProfile?.uid
+      );
+      setTrainings(userTrainings);
+      if (userTrainings.length > 0) {
+        setCurrentTraining(userTrainings[0]);
+      }
+    } catch (error) {
+      console.error("Failed to load trainings:", error);
+    }
+  };
+
+  const handleParticipantAdded = (newParticipant) => {
+    console.log("New participant added:", newParticipant);
+  };
+
+  const handleTrainingCreated = (newTraining) => {
+    setTrainings((prev) => [newTraining, ...prev]);
+    setCurrentTraining(newTraining);
+  };
+
+  /* ---------- Derived stats ---------- */
   const averageScore = Math.round(
     participants.reduce((sum, p) => sum + p.totalScore, 0) /
-      participants.length || 0
+      (participants.length || 1)
   );
-  const topScore = Math.max(...participants.map((p) => p.totalScore));
-  const sortedParticipants = getSortedParticipants();
+  const topScore = Math.max(0, ...participants.map((p) => p.totalScore));
+  const sortedParticipants = getSortedParticipants(participants);
   const topPerformers = sortedParticipants.slice(0, 3);
 
-  const recentActivities = [
-    {
-      id: 1,
-      message: "Sarah Johnson earned points",
-      detail: "Perfect attendance streak",
-      time: "2 min ago",
-      type: "positive",
-      points: 5,
-      participant: "Sarah Johnson",
-    },
-    {
-      id: 2,
-      message: "David Kim lost points",
-      detail: "Late arrival",
-      time: "5 min ago",
-      type: "negative",
-      points: -3,
-      participant: "David Kim",
-    },
-    {
-      id: 3,
-      message: "Team Alpha milestone",
-      detail: "Project completed successfully",
-      time: "10 min ago",
-      type: "achievement",
-      points: 10,
-      participant: "Team Alpha",
-    },
-    {
-      id: 4,
-      message: "Mike Chen achievement",
-      detail: "Question Master badge earned",
-      time: "15 min ago",
-      type: "badge",
-      points: 15,
-      participant: "Mike Chen",
-    },
-  ];
-
-  const StatCard = ({
-    icon: Icon,
-    title,
-    value,
-    subtitle,
-    trend,
-    variant = "blue",
-  }) => {
+  /* ---------- UI Components ---------- */
+  const StatCard = ({ icon: Icon, title, value, subtitle, trend, variant }) => {
     const variants = {
       blue: "from-blue-500 to-blue-600",
       green: "from-emerald-500 to-emerald-600",
       purple: "from-indigo-500 to-indigo-600",
       orange: "from-amber-500 to-amber-600",
     };
-
     return (
       <div className="group relative bg-white rounded-2xl p-6 border border-gray-200 hover:border-blue-200 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
         <div className="flex items-start justify-between">
@@ -168,36 +230,27 @@ const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
   };
 
   const TopPerformerCard = ({ participant, index }) => {
-    const getRankStyle = () => {
-      switch (index) {
-        case 0:
-          return {
-            gradient: "from-amber-400 to-amber-500",
-            border: "border-amber-200",
-            bg: "bg-amber-50",
-          };
-        case 1:
-          return {
-            gradient: "from-gray-400 to-gray-500",
-            border: "border-gray-200",
-            bg: "bg-gray-50",
-          };
-        case 2:
-          return {
-            gradient: "from-orange-400 to-orange-500",
-            border: "border-orange-200",
-            bg: "bg-orange-50",
-          };
-        default:
-          return {
-            gradient: "from-blue-400 to-blue-500",
-            border: "border-blue-200",
-            bg: "bg-blue-50",
-          };
-      }
+    const rankStyle = [
+      {
+        gradient: "from-amber-400 to-amber-500",
+        border: "border-amber-200",
+        bg: "bg-amber-50",
+      },
+      {
+        gradient: "from-gray-400 to-gray-500",
+        border: "border-gray-200",
+        bg: "bg-gray-50",
+      },
+      {
+        gradient: "from-orange-400 to-orange-500",
+        border: "border-orange-200",
+        bg: "bg-orange-50",
+      },
+    ][index] || {
+      gradient: "from-blue-400 to-blue-500",
+      border: "border-blue-200",
+      bg: "bg-blue-50",
     };
-
-    const rankStyle = getRankStyle();
 
     return (
       <div
@@ -234,39 +287,38 @@ const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
     );
   };
 
+  /* ---------- Render ---------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6 space-y-6">
       {/* Welcome Header */}
       <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-8 text-white">
-        <div className="relative z-10">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
-            <div>
-              <h1 className="text-3xl lg:text-4xl font-bold mb-2">
-                Welcome back, {userProfile?.displayName || "Trainer"}! 👋
-              </h1>
-              <p className="text-blue-100 text-lg">
-                Your training session is performing exceptionally well
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
-                <div className="flex items-center space-x-2 text-white">
-                  <Clock className="h-5 w-5" />
-                  <span className="font-medium">Day 12 of 30</span>
-                </div>
-              </div>
-              <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
-                <div className="flex items-center space-x-2 text-white">
-                  <Activity className="h-5 w-5" />
-                  <span className="font-medium">High Activity</span>
-                </div>
-              </div>
-            </div>
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+          <div>
+            <h1 className="text-3xl lg:text-4xl font-bold mb-2">
+              Welcome back, {userProfile?.displayName || "Trainer"}! 👋
+            </h1>
+            <p className="text-blue-100 text-lg">
+              {currentTraining
+                ? `Training: ${currentTraining.name}`
+                : "No training selected"}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-center hover:bg-white/30"
+            >
+              Create Training
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-center hover:bg-white/30"
+              disabled={!currentTraining}
+            >
+              Add Participant
+            </button>
           </div>
         </div>
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32"></div>
-        <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/5 rounded-full translate-y-16 translate-x-16"></div>
       </div>
 
       {/* Stats Grid */}
@@ -333,7 +385,7 @@ const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
           </div>
         </div>
 
-        {/* Recent Activity Feed */}
+        {/* Recent Activity */}
         <div className="xl:col-span-2">
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -362,9 +414,9 @@ const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
         </div>
       </div>
 
-      {/* Team Progress */}
+      {/* Team Progress & Achievements */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Team Progress Section */}
+        {/* Team Progress */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
@@ -381,7 +433,6 @@ const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
                 0,
                 Math.min(100, (groupScore / 50) * 100)
               );
-
               return (
                 <div key={group.id} className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -418,59 +469,56 @@ const Dashboard = ({ participants, mockGroups, getSortedParticipants }) => {
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <Award className="h-5 w-5 text-amber-600 mr-2" />
+              <Award className="h-5 w-5 text-purple-600 mr-2" />
               Recent Achievements
             </h3>
           </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="text-center p-4 rounded-xl bg-amber-50 border border-amber-100 group hover:shadow-md transition-all duration-200">
-                <div className="w-12 h-12 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full mx-auto mb-3 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Trophy className="h-6 w-6 text-white" />
+          <div className="p-6 space-y-4">
+            {participants.slice(0, 3).map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold">
+                  {p.name.charAt(0)}
                 </div>
-                <h4 className="font-bold text-gray-900 mb-1">Top Scorer</h4>
-                <p className="text-xs text-gray-600 mb-2">Sarah Johnson</p>
-                <span className="inline-block bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-xs font-medium">
-                  New!
-                </span>
-              </div>
-
-              <div className="text-center p-4 rounded-xl bg-blue-50 border border-blue-100 group hover:shadow-md transition-all duration-200">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-blue-500 rounded-full mx-auto mb-3 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Users className="h-6 w-6 text-white" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
+                    {p.name}
+                  </p>
+                  <p className="text-sm text-gray-500 truncate">
+                    Achievement unlocked
+                  </p>
                 </div>
-                <h4 className="font-bold text-gray-900 mb-1">Team Player</h4>
-                <p className="text-xs text-gray-600 mb-2">Mike Chen</p>
-                <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                  2d ago
-                </span>
-              </div>
-
-              <div className="text-center p-4 rounded-xl bg-emerald-50 border border-emerald-100 group hover:shadow-md transition-all duration-200">
-                <div className="w-12 h-12 bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full mx-auto mb-3 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Target className="h-6 w-6 text-white" />
+                <div className="text-right">
+                  <Clock className="h-4 w-4 text-gray-400" />
                 </div>
-                <h4 className="font-bold text-gray-900 mb-1">Consistent</h4>
-                <p className="text-xs text-gray-600 mb-2">Perfect attendance</p>
-                <span className="inline-block bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full text-xs font-medium">
-                  3d ago
-                </span>
               </div>
-
-              <div className="text-center p-4 rounded-xl bg-indigo-50 border border-indigo-100 group hover:shadow-md transition-all duration-200">
-                <div className="w-12 h-12 bg-gradient-to-r from-indigo-400 to-indigo-500 rounded-full mx-auto mb-3 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Star className="h-6 w-6 text-white" />
-                </div>
-                <h4 className="font-bold text-gray-900 mb-1">Rising Star</h4>
-                <p className="text-xs text-gray-600 mb-2">Most improved</p>
-                <span className="inline-block bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-medium">
-                  1w ago
-                </span>
+            ))}
+            {participants.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <Award className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No achievements yet</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      {showAddModal && (
+        <AddParticipantModal
+          trainingId={currentTraining?.id}
+          onClose={() => setShowAddModal(false)}
+          onParticipantAdded={handleParticipantAdded}
+        />
+      )}
+      {showCreateModal && (
+        <CreateTrainingModal
+          onClose={() => setShowCreateModal(false)}
+          onTrainingCreated={handleTrainingCreated}
+        />
+      )}
     </div>
   );
 };

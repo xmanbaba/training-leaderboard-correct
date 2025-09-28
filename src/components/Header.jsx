@@ -1,7 +1,19 @@
-import React from 'react';
-import { Trophy, Settings, Share2, Download, Menu, X, Zap, Star } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trophy, Settings, Share2, Download, Menu, X, Zap, Star, LogOut, User } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
-const Header = ({ selectedTraining, sidebarCollapsed, setSidebarCollapsed }) => {
+const Header = ({ selectedTraining, sidebarCollapsed, setSidebarCollapsed, participants }) => {
+  const { userProfile, signOut } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
+
   return (
     <div className="bg-white/80 backdrop-blur-lg border-b border-blue-200/50 px-4 py-4 lg:px-6 sticky top-0 z-50 shadow-sm">
       <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -46,12 +58,14 @@ const Header = ({ selectedTraining, sidebarCollapsed, setSidebarCollapsed }) => 
           {/* Quick Stats */}
           <div className="hidden md:flex items-center space-x-4 mr-4">
             <div className="text-center">
-              <div className="text-lg font-bold text-blue-600">24</div>
+              <div className="text-lg font-bold text-blue-600">{participants?.length || 0}</div>
               <div className="text-xs text-gray-500">Participants</div>
             </div>
             <div className="w-px h-8 bg-gray-300"></div>
             <div className="text-center">
-              <div className="text-lg font-bold text-green-600">85%</div>
+              <div className="text-lg font-bold text-green-600">
+                {participants ? Math.round((participants.filter(p => p.totalScore > 0).length / participants.length) * 100) : 0}%
+              </div>
               <div className="text-xs text-gray-500">Engagement</div>
             </div>
           </div>
@@ -68,10 +82,45 @@ const Header = ({ selectedTraining, sidebarCollapsed, setSidebarCollapsed }) => 
             <span className="text-sm font-medium">Export</span>
           </button>
           
-          {/* Gamification Element */}
-          <div className="hidden lg:flex items-center space-x-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-2.5 rounded-xl shadow-lg">
-            <Zap className="h-4 w-4" />
-            <span className="text-sm font-bold">Level 5</span>
+          {/* User Profile Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 px-3 py-2 rounded-xl transition-all duration-200 border border-blue-200"
+            >
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                <User className="h-4 w-4 text-white" />
+              </div>
+              <div className="hidden lg:block text-left">
+                <p className="text-sm font-medium text-gray-900">
+                  {userProfile?.displayName || 'User'}
+                </p>
+                <p className="text-xs text-gray-600 capitalize">
+                  {userProfile?.role || 'participant'}
+                </p>
+              </div>
+            </button>
+
+            {/* Dropdown Menu */}
+            {showUserMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <p className="text-sm font-medium text-gray-900">
+                    {userProfile?.displayName}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {userProfile?.email}
+                  </p>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center space-x-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import "./App.css";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Home from "./components/Auth/Home";
 import Header from "./components/Header";
 import Navigation from "./components/Navigation";
 import Dashboard from "./components/Dashboard";
@@ -21,11 +24,12 @@ const calculateLevel = (participant) => {
     .filter(([key]) => scoringCategories.positive[key])
     .reduce((sum, [, value]) => sum + Math.max(0, value), 0);
 
+  // Using blue theme for levels as requested
   if (positiveContributions >= 50)
     return {
       level: 5,
       title: "Master",
-      color: "bg-gradient-to-r from-purple-500 to-indigo-600",
+      color: "bg-gradient-to-r from-blue-600 to-indigo-700",
     };
   if (positiveContributions >= 30)
     return {
@@ -37,22 +41,23 @@ const calculateLevel = (participant) => {
     return {
       level: 3,
       title: "Proficient",
-      color: "bg-gradient-to-r from-green-500 to-emerald-600",
+      color: "bg-gradient-to-r from-blue-400 to-blue-500",
     };
   if (positiveContributions >= 10)
     return {
       level: 2,
       title: "Contributor",
-      color: "bg-gradient-to-r from-yellow-500 to-orange-500",
+      color: "bg-gradient-to-r from-blue-300 to-blue-400",
     };
   return {
     level: 1,
     title: "Newcomer",
-    color: "bg-gradient-to-r from-gray-400 to-gray-500",
+    color: "bg-gradient-to-r from-slate-400 to-slate-500",
   };
 };
 
-export default function App() {
+// Main App Layout Component (for authenticated users)
+const MainAppLayout = () => {
   const [participants, setParticipants] = useState(mockParticipants);
   const [scoringMode, setScoringMode] = useState("individual");
   const [scoringScale, setScoringScale] = useState({ min: -10, max: 10 });
@@ -105,67 +110,67 @@ export default function App() {
   };
 
   return (
-    <Router>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-        {/* Mobile overlay */}
-        {!sidebarCollapsed && (
-          <div
-            className="lg:hidden fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm z-40"
-            onClick={() => setSidebarCollapsed(true)}
-          />
-        )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Mobile overlay */}
+      {!sidebarCollapsed && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm z-40"
+          onClick={() => setSidebarCollapsed(true)}
+        />
+      )}
 
-        {/* Top Header */}
-        <Header
-          selectedTraining={selectedTraining}
-          sidebarCollapsed={sidebarCollapsed}
-          setSidebarCollapsed={setSidebarCollapsed}
-          participants={participants}
+      {/* Top Header */}
+      <Header
+        selectedTraining={selectedTraining}
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
+        participants={participants}
+      />
+
+      <div className="flex">
+        {/* Sidebar Navigation */}
+        <Navigation
+          collapsed={sidebarCollapsed}
+          setCollapsed={setSidebarCollapsed}
         />
 
-        <div className="flex">
-          {/* Sidebar Navigation */}
-          <Navigation
-            collapsed={sidebarCollapsed}
-            setCollapsed={setSidebarCollapsed}
-          />
-
-          {/* Main Content Area */}
-          <main
-            className={`flex-1 transition-all duration-300 ease-in-out ${
-              sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
-            }`}
-            role="main"
-          >
-            <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-              <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <Dashboard
-                      participants={participants}
-                      mockGroups={mockGroups}
-                      getSortedParticipants={getSortedParticipants}
-                      calculateLevel={calculateLevel}
-                    />
-                  }
-                />
-                <Route
-                  path="/leaderboard"
-                  element={
-                    <Leaderboard
-                      scoringMode={scoringMode}
-                      setScoringMode={setScoringMode}
-                      getSortedParticipants={getSortedParticipants}
-                      getSortedGroups={getSortedGroups}
-                      scoringCategories={scoringCategories}
-                      calculateLevel={calculateLevel}
-                    />
-                  }
-                />
-                <Route
-                  path="/quick-scoring"
-                  element={
+        {/* Main Content Area */}
+        <main
+          className={`flex-1 transition-all duration-300 ease-in-out ${
+            sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
+          }`}
+          role="main"
+        >
+          <div className="p-4 lg:p-6 max-w-7xl mx-auto">
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <Dashboard
+                    participants={participants}
+                    mockGroups={mockGroups}
+                    getSortedParticipants={getSortedParticipants}
+                    calculateLevel={calculateLevel}
+                  />
+                }
+              />
+              <Route
+                path="/leaderboard"
+                element={
+                  <Leaderboard
+                    scoringMode={scoringMode}
+                    setScoringMode={setScoringMode}
+                    getSortedParticipants={getSortedParticipants}
+                    getSortedGroups={getSortedGroups}
+                    scoringCategories={scoringCategories}
+                    calculateLevel={calculateLevel}
+                  />
+                }
+              />
+              <Route
+                path="/quick-scoring"
+                element={
+                  <ProtectedRoute requireRole="trainer">
                     <QuickScoring
                       participants={participants}
                       scoringCategories={scoringCategories}
@@ -173,44 +178,69 @@ export default function App() {
                       updateParticipantScore={updateParticipantScore}
                       calculateLevel={calculateLevel}
                     />
-                  }
-                />
-                <Route
-                  path="/participants"
-                  element={
-                    <Participants
-                      participants={participants}
-                      mockGroups={mockGroups}
-                      calculateLevel={calculateLevel}
-                    />
-                  }
-                />
-                <Route
-                  path="/settings"
-                  element={
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/participants"
+                element={
+                  <Participants
+                    participants={participants}
+                    mockGroups={mockGroups}
+                    calculateLevel={calculateLevel}
+                  />
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute requireRole="trainer">
                     <Settings
                       selectedTraining={selectedTraining}
                       scoringScale={scoringScale}
                       setScoringScale={setScoringScale}
                     />
-                  }
-                />
-                <Route
-                  path="*"
-                  element={
-                    <div className="text-center py-12">
-                      <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                        404
-                      </h1>
-                      <p className="text-gray-600">Page not found</p>
-                    </div>
-                  }
-                />
-              </Routes>
-            </div>
-          </main>
-        </div>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <div className="text-center py-12">
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                      404
+                    </h1>
+                    <p className="text-gray-600">Page not found</p>
+                  </div>
+                }
+              />
+            </Routes>
+          </div>
+        </main>
       </div>
-    </Router>
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <Routes>
+          {/* Public route - Authentication/Landing page */}
+          <Route path="/auth" element={<Home />} />
+
+          {/* Protected routes - Main application */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <MainAppLayout />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }

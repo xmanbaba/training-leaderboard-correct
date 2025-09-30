@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
-import { userRoles } from "../../config/firestoreSchema";
 
 const RegisterForm = () => {
   const [formData, setFormData] = useState({
@@ -10,7 +9,6 @@ const RegisterForm = () => {
     email: "",
     password: "",
     confirmPassword: "",
-    role: userRoles.PARTICIPANT,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,13 +29,18 @@ const RegisterForm = () => {
       return;
     }
 
+    if (formData.password.length < 6) {
+      alert("Password must be at least 6 characters");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       await signUp(formData.email, formData.password, {
         displayName: formData.displayName,
-        role: formData.role,
       });
+      // On success, user will be redirected by AuthContext
     } catch (err) {
       console.error("Registration error:", err);
     } finally {
@@ -51,7 +54,10 @@ const RegisterForm = () => {
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
           Create account
         </h2>
-        <p className="text-gray-600">Join Training Leaderboard today</p>
+        <p className="text-gray-600">
+          Join Training Leaderboard to create or participate in training
+          sessions
+        </p>
       </div>
 
       {error && (
@@ -101,25 +107,6 @@ const RegisterForm = () => {
 
         <div>
           <label
-            htmlFor="role"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Role
-          </label>
-          <select
-            id="role"
-            name="role"
-            value={formData.role}
-            onChange={handleChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
-          >
-            <option value={userRoles.PARTICIPANT}>Participant</option>
-            <option value={userRoles.TRAINER}>Trainer</option>
-          </select>
-        </div>
-
-        <div>
-          <label
             htmlFor="password"
             className="block text-sm font-medium text-gray-700 mb-2"
           >
@@ -149,6 +136,9 @@ const RegisterForm = () => {
               )}
             </button>
           </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Must be at least 6 characters
+          </p>
         </div>
 
         <div>
@@ -185,6 +175,10 @@ const RegisterForm = () => {
           </>
         )}
       </button>
+
+      <div className="text-sm text-gray-500 text-center">
+        By signing up, you agree to create or join training sessions
+      </div>
     </form>
   );
 };

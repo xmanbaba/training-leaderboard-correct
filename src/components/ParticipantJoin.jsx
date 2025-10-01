@@ -14,7 +14,7 @@ import {
   AlertCircle,
   Loader,
 } from "lucide-react";
-import { TrainingService } from "../services/trainingService";
+import { SessionService } from "../services/sessionService";
 import { ParticipantService } from "../services/participantService";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -40,7 +40,7 @@ const ParticipantJoin = () => {
     hasAccount: false,
   });
 
-  const trainingService = new TrainingService();
+  const sessionService = new SessionService();
   const participantService = new ParticipantService();
 
   useEffect(() => {
@@ -52,7 +52,7 @@ const ParticipantJoin = () => {
       setLoading(true);
       setError("");
 
-      const trainingData = await trainingService.getTrainingByJoinCode(
+      const trainingData = await sessionService.getTrainingByJoinCode(
         joinCode
       );
       setTraining(trainingData);

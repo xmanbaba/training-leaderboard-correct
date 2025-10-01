@@ -1,5 +1,5 @@
 // src/config/firestoreSchema.js
-// This file documents our Firestore database structure
+// This file documents our Firestore database structure (hybrid: sessions-first, org-ready)
 
 /*
 FIRESTORE COLLECTIONS STRUCTURE:
@@ -9,95 +9,94 @@ FIRESTORE COLLECTIONS STRUCTURE:
    - Fields:
      - email: string
      - displayName: string
-     - role: "admin" | "trainer" | "participant"
+     - photoURL?: string
      - createdAt: timestamp
      - updatedAt: timestamp
-     - profilePicture?: string
+     - lastLogin?: timestamp
+     - activeSessionId?: string   // helps with "lock-in" flow
 
-2. organizations/
+2. organizations/  (optional layer for companies/schools/etc)
    - orgId (document ID)
    - Fields:
      - name: string
      - createdBy: userId
-     - members: array of userIds
-     - settings: object
      - createdAt: timestamp
+     - members: array of userIds
+     - orgAdmins: array of userIds
+     - settings: {
+         allowOrgWideAdmins: boolean
+         defaultScoringCategories?: object
+       }
 
-3. trainings/
-   - trainingId (document ID)
+3. sessions/
+   - sessionId (document ID)
    - Fields:
      - name: string
-     - description: string
-     - organizationId: string
-     - createdBy: userId (trainer)
-     - startDate: timestamp
-     - endDate: timestamp
-     - status: "draft" | "active" | "completed" | "cancelled"
-     - maxParticipants?: number
-     - participants: array of userIds
-     - scoringScale: { min: number, max: number }
-     - settings: {
-       - allowSelfRegistration: boolean
-       - publicLeaderboard: boolean
-       - emailNotifications: boolean
-       - achievementBadges: boolean
-     }
-     - registrationCode: string (for self-registration)
+     - description?: string
+     - createdBy: userId (session creator → auto SessionAdmin)
      - createdAt: timestamp
      - updatedAt: timestamp
+     - organizationId?: orgId   // null if standalone
+     - sessionAdmins: array of userIds
+     - status: "draft" | "active" | "completed" | "cancelled"
+     - startDate?: timestamp
+     - endDate?: timestamp
+     - settings: {
+         allowSelfRegistration: boolean
+         publicLeaderboard: boolean
+         emailNotifications: boolean
+         achievementBadges: boolean
+       }
+     - registrationCode?: string  // for self-registration
+     - maxParticipants?: number
 
 4. participants/
-   - participantId (document ID)
+   - sessions/{sessionId}/participants/{participantId}
    - Fields:
-     - userId: string
-     - trainingId: string
+     - userId?: string   // null if external guest
      - name: string
-     - email: string
+     - email?: string
      - phone?: string
-     - department?: string
-     - groupId?: string
+     - teamId?: string
      - joinedAt: timestamp
      - status: "active" | "inactive" | "completed"
 
-5. groups/
-   - groupId (document ID)
+5. teams/
+   - sessions/{sessionId}/teams/{teamId}
    - Fields:
      - name: string
-     - trainingId: string
-     - participantIds: array of participantIds
      - createdBy: userId
      - createdAt: timestamp
+     - participants: array of participantIds
+     - score: number
 
 6. scores/
-   - scoreId (document ID)
+   - sessions/{sessionId}/scores/{scoreId}
    - Fields:
      - participantId: string
-     - trainingId: string
      - category: string (e.g., "attendance", "questions_asked")
      - value: number
-     - awardedBy: userId (trainer who gave the score)
+     - awardedBy: userId (SessionAdmin who gave the score)
      - reason?: string
      - timestamp: timestamp
      - type: "positive" | "negative"
 
 7. activities/
-   - activityId (document ID)
+   - sessions/{sessionId}/activities/{activityId}
    - Fields:
-     - trainingId: string
      - participantId?: string
-     - groupId?: string
+     - teamId?: string
      - type: "score_awarded" | "level_up" | "badge_earned" | "participant_joined"
      - description: string
      - points?: number
      - category?: string
      - timestamp: timestamp
-     - metadata: object (flexible for different activity types)
+     - metadata: object
 
 8. achievements/
-   - achievementId (document ID)
+   - sessions/{sessionId}/achievements/{achievementId}
    - Fields:
      - participantId: string
-     - trainingId: string
      - type: "level" | "badge" | "milestone"
      - name: string
      - description: string
@@ -105,31 +104,30 @@ FIRESTORE COLLECTIONS STRUCTURE:
      - metadata: object
 
 SECURITY RULES CONSIDERATIONS:
-- Users can only read/write their own user document
-- Trainers can manage trainings they created
-- Participants can only read training data, not modify scores
-- Admins have full access within their organization
+- Users can only read/write their own user document.
+- SessionAdmins can manage sessions they’re assigned to.
+- OrgAdmins can manage everything under their org (including all sessions).
+- Participants can only read session data; they cannot write scores or change session settings.
 */
 
-// Helper functions for Firestore operations
 export const collections = {
   USERS: "users",
   ORGANIZATIONS: "organizations",
-  TRAININGS: "trainings",
+  SESSIONS: "sessions",
   PARTICIPANTS: "participants",
-  GROUPS: "groups",
+  TEAMS: "teams",
   SCORES: "scores",
   ACTIVITIES: "activities",
   ACHIEVEMENTS: "achievements",
 };
 
 export const userRoles = {
-  ADMIN: "admin",
-  TRAINER: "trainer",
+  ORG_ADMIN: "orgAdmin",
+  SESSION_ADMIN: "sessionAdmin",
   PARTICIPANT: "participant",
 };
 
-export const trainingStatus = {
+export const sessionStatus = {
   DRAFT: "draft",
   ACTIVE: "active",
   COMPLETED: "completed",

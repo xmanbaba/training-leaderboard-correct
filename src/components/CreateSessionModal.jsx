@@ -1,14 +1,10 @@
-// src/components/CreateTrainingModal.jsx
+// src/components/CreateSessionModal.jsx
 import React, { useState } from "react";
 import {
   X,
   Calendar,
   Users,
   MapPin,
-  FileText,
-  Share2,
-  Settings,
-  Plus,
   Copy,
   CheckCircle,
   AlertCircle,
@@ -17,16 +13,16 @@ import {
   Clock,
   Globe,
 } from "lucide-react";
-import { TrainingService } from "../services/trainingService";
+import { SessionService } from "../services/sessionService";
 import { useAuth } from "../contexts/AuthContext";
 
-const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
+const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [activeStep, setActiveStep] = useState(1);
-  const [createdTraining, setCreatedTraining] = useState(null);
+  const [createdSession, setCreatedSession] = useState(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -42,7 +38,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
     scoringScale: { min: -50, max: 50 },
   });
 
-  const trainingService = new TrainingService();
+  const sessionService = new SessionService();
 
   const resetForm = () => {
     setFormData({
@@ -61,7 +57,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
     setActiveStep(1);
     setError("");
     setSuccess("");
-    setCreatedTraining(null);
+    setCreatedSession(null);
   };
 
   const handleClose = () => {
@@ -76,7 +72,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
 
   const validateStep1 = () => {
     if (!formData.name.trim()) {
-      setError("Training name is required");
+      setError("Session name is required");
       return false;
     }
     if (!formData.description.trim()) {
@@ -99,13 +95,12 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
       setLoading(true);
       setError("");
 
-      // Get template configuration
-      const templates = trainingService.getTrainingTemplates();
+      const templates = sessionService.getSessionTemplates();
       const selectedTemplate = templates.find(
         (t) => t.id === formData.template
       );
 
-      const trainingData = {
+      const sessionData = {
         name: formData.name.trim(),
         description: formData.description.trim(),
         cohort: formData.cohort.trim() || null,
@@ -141,30 +136,28 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
         scoringScale: formData.scoringScale,
       };
 
-      const newTraining = await trainingService.createTraining(
-        trainingData,
+      const newSession = await sessionService.createSession(
+        sessionData,
         user.uid
       );
-      setCreatedTraining(newTraining);
-      setSuccess("Training session created successfully!");
-      setActiveStep(3); // Move to success step
-
-      onTrainingCreated(newTraining);
+      setCreatedSession(newSession);
+      setSuccess("Session created successfully!");
+      setActiveStep(3);
+      onSessionCreated(newSession);
     } catch (err) {
-      setError(err.message || "Failed to create training session");
+      setError(err.message || "Failed to create session");
     } finally {
       setLoading(false);
     }
   };
 
   const copyJoinUrl = async () => {
-    if (createdTraining) {
-      const joinUrl = `${window.location.origin}/join/${createdTraining.joinCode}`;
+    if (createdSession) {
+      const joinUrl = `${window.location.origin}/join/${createdSession.joinCode}`;
       try {
         await navigator.clipboard.writeText(joinUrl);
         setSuccess("Join URL copied to clipboard!");
-      } catch (err) {
-        // Fallback for older browsers
+      } catch {
         const textArea = document.createElement("textarea");
         textArea.value = joinUrl;
         document.body.appendChild(textArea);
@@ -176,7 +169,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
     }
   };
 
-  const templates = trainingService.getTrainingTemplates();
+  const templates = sessionService.getSessionTemplates();
 
   if (!isOpen) return null;
 
@@ -186,11 +179,9 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Create Training Session
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900">Create Session</h2>
             <p className="text-gray-600 mt-1">
-              Set up a new interactive training experience
+              Set up a new interactive session
             </p>
           </div>
           <button
@@ -250,39 +241,35 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
 
         {/* Content */}
         <div className="p-6 max-h-[60vh] overflow-y-auto">
-          {/* Step 1: Basic Information */}
+          {/* Step 1 */}
           {activeStep === 1 && (
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Training Name *
+                  Session Name *
                 </label>
                 <input
                   type="text"
-                  required
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="e.g., Advanced React Development Workshop"
+                  placeholder="Session Name"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description *
                 </label>
                 <textarea
-                  required
                   value={formData.description}
                   onChange={(e) =>
                     handleInputChange("description", e.target.value)
                   }
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Describe what participants will learn and experience..."
+                  placeholder="Describe session details..."
                 />
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -295,10 +282,9 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                       handleInputChange("cohort", e.target.value)
                     }
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Spring 2024 Batch"
+                    placeholder="Spring 2024 Batch"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Location
@@ -312,12 +298,11 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                         handleInputChange("location", e.target.value)
                       }
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Conference Room A / Online"
+                      placeholder="Room / Online"
                     />
                   </div>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -335,7 +320,6 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     End Date
@@ -356,12 +340,12 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
             </div>
           )}
 
-          {/* Step 2: Configuration */}
+          {/* Step 2 */}
           {activeStep === 2 && (
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Training Template
+                  Session Template
                 </label>
                 <div className="grid grid-cols-1 gap-3">
                   {templates.map((template) => (
@@ -429,7 +413,6 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Scoring Range
@@ -464,11 +447,12 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                 </div>
               </div>
 
+              {/* Toggles */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="font-medium text-gray-900">
-                      Public Training
+                      Public Session
                     </h4>
                     <p className="text-sm text-gray-600">
                       Allow public discovery and registration
@@ -483,7 +467,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                       }
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                   </label>
                 </div>
 
@@ -505,7 +489,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                       }
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                   </label>
                 </div>
               </div>
@@ -513,18 +497,17 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
           )}
 
           {/* Step 3: Success */}
-          {activeStep === 3 && createdTraining && (
+          {activeStep === 3 && createdSession && (
             <div className="text-center space-y-6">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
                 <Trophy className="h-8 w-8 text-green-600" />
               </div>
-
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  Training Session Created! 🎉
+                  Session Created! 🎉
                 </h3>
                 <p className="text-gray-600">
-                  Your training session "{createdTraining.name}" is ready for
+                  Your session "{createdSession.name}" is ready for
                   participants.
                 </p>
               </div>
@@ -533,7 +516,6 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                 <h4 className="font-medium text-blue-900 mb-4">
                   Share with Participants
                 </h4>
-
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-blue-900 mb-2">
@@ -542,14 +524,12 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                     <div className="flex items-center space-x-2">
                       <div className="flex-1 bg-white border border-blue-200 rounded-lg px-4 py-3 text-center">
                         <span className="text-2xl font-bold text-blue-600 tracking-wider">
-                          {createdTraining.joinCode}
+                          {createdSession.joinCode}
                         </span>
                       </div>
                       <button
                         onClick={() =>
-                          navigator.clipboard.writeText(
-                            createdTraining.joinCode
-                          )
+                          navigator.clipboard.writeText(createdSession.joinCode)
                         }
                         className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                         title="Copy join code"
@@ -567,7 +547,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                       <input
                         type="text"
                         readOnly
-                        value={`${window.location.origin}/join/${createdTraining.joinCode}`}
+                        value={`${window.location.origin}/join/${createdSession.joinCode}`}
                         className="flex-1 bg-white border border-blue-200 rounded-lg px-4 py-3 text-sm"
                       />
                       <button
@@ -585,8 +565,8 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                   <p>Participants can join by:</p>
                   <ul className="mt-2 space-y-1 list-disc list-inside">
                     <li>Visiting the join URL directly</li>
-                    <li>Entering the join code on your platform</li>
-                    <li>Being added manually by you as the trainer</li>
+                    <li>Entering the join code on the platform</li>
+                    <li>Being added manually by the trainer</li>
                   </ul>
                 </div>
               </div>
@@ -598,7 +578,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                     <span>Max Participants</span>
                   </div>
                   <div className="font-semibold text-gray-900">
-                    {createdTraining.maxParticipants || "Unlimited"}
+                    {createdSession.maxParticipants || "Unlimited"}
                   </div>
                 </div>
 
@@ -608,7 +588,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                     <span>Visibility</span>
                   </div>
                   <div className="font-semibold text-gray-900">
-                    {createdTraining.isPublic ? "Public" : "Private"}
+                    {createdSession.isPublic ? "Public" : "Private"}
                   </div>
                 </div>
               </div>
@@ -617,15 +597,15 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
               <AlertCircle className="h-4 w-4" />
               <span className="text-sm">{error}</span>
             </div>
           )}
 
-          {/* Success Message */}
+          {/* Success Message (non-step 3) */}
           {success && activeStep !== 3 && (
-            <div className="flex items-center space-x-2 text-green-600 bg-green-50 border border-green-200 rounded-lg p-3">
+            <div className="flex items-center space-x-2 text-green-600 bg-green-50 border border-green-200 rounded-lg p-3 mt-4">
               <CheckCircle className="h-4 w-4" />
               <span className="text-sm">{success}</span>
             </div>
@@ -635,7 +615,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
         {/* Footer */}
         <div className="border-t border-gray-200 p-6">
           {activeStep === 3 ? (
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end">
               <button
                 onClick={handleClose}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
@@ -673,9 +653,7 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
                   </>
                 ) : (
                   <>
-                    <span>{activeStep === 2 ? "Create Training" : "Next"}</span>
-                    {activeStep === 1 && <Plus className="h-4 w-4" />}
-                    {activeStep === 2 && <Trophy className="h-4 w-4" />}
+                    <span>{activeStep === 2 ? "Create Session" : "Next"}</span>
                   </>
                 )}
               </button>
@@ -687,4 +665,4 @@ const CreateTrainingModal = ({ isOpen, onClose, onTrainingCreated }) => {
   );
 };
 
-export default CreateTrainingModal;
+export default CreateSessionModal;

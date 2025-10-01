@@ -1,4 +1,3 @@
-// Dashboard.jsx
 import React, { useState, useEffect } from "react";
 import {
   Users,
@@ -14,9 +13,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ParticipantService } from "../services/participantService";
-import { SessionService } from "../services/sessionService";
+import { SessionService } from "../contexts/SessionContext";
 import AddParticipantModal from "./AddParticipantModal";
-import CreateSessionModal from "./CreateSessionModal";
+import CreateTrainingModal from "./CreateSessionModal";
 
 const Dashboard = ({ mockGroups, getSortedParticipants }) => {
   const { userProfile } = useAuth();
@@ -37,20 +36,6 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
     loadSessions();
   }, []);
 
-  const loadSessions = async () => {
-    try {
-      const adminSessions = await sessionService.getAdminSessions(
-        userProfile?.uid
-      );
-      setSessions(adminSessions);
-      if (adminSessions.length > 0) {
-        setCurrentSession(adminSessions[0]);
-      }
-    } catch (error) {
-      console.error("Failed to load sessions:", error);
-    }
-  };
-
   /* ---------- Real-time participants ---------- */
   useEffect(() => {
     if (currentSession) {
@@ -62,7 +47,7 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
     }
   }, [currentSession]);
 
-  /* ---------- Real-time activities ---------- */
+  /* ---------- Real-time activities (if available) ---------- */
   useEffect(() => {
     if (participantService.subscribeToRecentActivities && currentSession) {
       const unsubscribe = participantService.subscribeToRecentActivities(
@@ -71,7 +56,7 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
       );
       return () => unsubscribe();
     } else {
-      // fallback mock data
+      // fallback static mock
       setRecentActivities([
         {
           id: 1,
@@ -114,6 +99,20 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
   }, [currentSession]);
 
   /* ---------- Helpers ---------- */
+  const loadSessions = async () => {
+    try {
+      const userSessions = await sessionService.getAdminSessions(
+        userProfile?.uid
+      );
+      setSessions(userSessions);
+      if (userSessions.length > 0) {
+        setCurrentSession(userSessions[0]);
+      }
+    } catch (error) {
+      console.error("Failed to load sessions:", error);
+    }
+  };
+
   const handleParticipantAdded = (newParticipant) => {
     console.log("New participant added:", newParticipant);
   };
@@ -121,6 +120,7 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
   const handleSessionCreated = (newSession) => {
     setSessions((prev) => [newSession, ...prev]);
     setCurrentSession(newSession);
+    setShowCreateModal(false);
   };
 
   /* ---------- Derived stats ---------- */
@@ -419,84 +419,75 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Team Progress */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <Building2 className="h-5 w-5 text-indigo-600 mr-2" />
+              <BarChart3 className="h-5 w-5 text-indigo-600 mr-2" />
               Team Progress
             </h3>
           </div>
-          <div className="p-6 space-y-6">
-            {mockGroups.map((group) => {
-              const groupScore = participants
-                .filter((p) => group.participantIds.includes(p.id))
-                .reduce((sum, p) => sum + p.totalScore, 0);
-              const progressPercentage = Math.max(
-                0,
-                Math.min(100, (groupScore / 50) * 100)
-              );
-              return (
-                <div key={group.id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        {group.name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {group.participantIds.length} members
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900">{groupScore}</p>
-                      <p className="text-sm text-gray-500">points</p>
-                    </div>
+          <div className="p-6 space-y-4">
+            {mockGroups.length > 0 ? (
+              mockGroups.map((team) => (
+                <div key={team.id} className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-700">
+                      {team.name}
+                    </span>
+                    <span className="text-gray-500">{team.progress}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-gray-100 rounded-full h-2">
                     <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${progressPercentage}%` }}
+                      className="bg-indigo-500 h-2 rounded-full"
+                      style={{ width: `${team.progress}%` }}
                     />
                   </div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Progress</span>
-                    <span>{Math.round(progressPercentage)}%</span>
-                  </div>
                 </div>
-              );
-            })}
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No teams yet</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Recent Achievements */}
+        {/* Achievements */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-yellow-50">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <Award className="h-5 w-5 text-purple-600 mr-2" />
-              Recent Achievements
+              <Award className="h-5 w-5 text-amber-600 mr-2" />
+              Achievements
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            {participants.slice(0, 3).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold">
-                  {p.name.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">
-                    {p.name}
-                  </p>
-                  <p className="text-sm text-gray-500 truncate">
-                    Achievement unlocked
-                  </p>
-                </div>
-                <div className="text-right">
-                  <Clock className="h-4 w-4 text-gray-400" />
-                </div>
-              </div>
-            ))}
-            {participants.length === 0 && (
+            {recentActivities.filter(
+              (a) => a.type === "badge" || a.type === "achievement"
+            ).length > 0 ? (
+              recentActivities
+                .filter((a) => a.type === "badge" || a.type === "achievement")
+                .map((achievement) => (
+                  <div
+                    key={achievement.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Star className="h-5 w-5 text-yellow-500" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {achievement.message}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {achievement.detail}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
+                      +{achievement.points} pts
+                    </span>
+                  </div>
+                ))
+            ) : (
               <div className="text-center py-8 text-gray-500">
                 <Award className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>No achievements yet</p>
@@ -509,15 +500,16 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
       {/* Modals */}
       {showAddModal && (
         <AddParticipantModal
-          sessionId={currentSession?.id}
+          session={currentSession}
           onClose={() => setShowAddModal(false)}
           onParticipantAdded={handleParticipantAdded}
         />
       )}
+
       {showCreateModal && (
-        <CreateSessionModal
+        <CreateTrainingModal
           onClose={() => setShowCreateModal(false)}
-          onSessionCreated={handleSessionCreated}
+          onTrainingCreated={handleSessionCreated}
         />
       )}
     </div>

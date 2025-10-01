@@ -30,8 +30,7 @@ export const SessionProvider = ({ children }) => {
   const { user } = useAuth();
 
   const [currentSession, setCurrentSession] = useState(null);
-  const [userRole, setUserRole] = useState(null); // 'trainer' | 'participant' | null
-  const [sessions, setSessions] = useState([]); // All sessions user is part of
+  const [sessions, setSessions] = useState([]); // all sessions user is part of
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -39,16 +38,14 @@ export const SessionProvider = ({ children }) => {
   useEffect(() => {
     if (!user) {
       setCurrentSession(null);
-      setUserRole(null);
       setSessions([]);
       setLoading(false);
       return;
     }
-
     loadUserSessions();
   }, [user]);
 
-  // Listen to current session changes
+  // Listen to current session participant doc changes
   useEffect(() => {
     if (!currentSession?.id || !user) return;
 
@@ -58,12 +55,18 @@ export const SessionProvider = ({ children }) => {
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();
-          setUserRole(data.role);
+          setCurrentSession((prev) => ({
+            ...prev,
+            roles: {
+              sessionAdmin: data.role === "sessionAdmin",
+              participant: data.role === "participant",
+              orgAdmin: data.orgAdmin || false,
+            },
+            participantData: data,
+          }));
         }
       },
-      (err) => {
-        console.error("Error listening to session participant:", err);
-      }
+      (err) => console.error("Error listening to session participant:", err)
     );
 
     return () => unsubscribe();
@@ -74,7 +77,6 @@ export const SessionProvider = ({ children }) => {
       setLoading(true);
       setError(null);
 
-      // Query all sessionParticipants where userId matches
       const q = query(
         collection(db, collections.SESSION_PARTICIPANTS),
         where("userId", "==", user.uid)
@@ -88,7 +90,7 @@ export const SessionProvider = ({ children }) => {
         return;
       }
 
-      // Get all session details
+      // Get session details and build roles object
       const sessionPromises = participantSnap.docs.map(
         async (participantDoc) => {
           const participantData = participantDoc.data();
@@ -97,11 +99,17 @@ export const SessionProvider = ({ children }) => {
           );
 
           if (sessionDoc.exists()) {
+            const roles = {
+              sessionAdmin: participantData.role === "sessionAdmin",
+              participant: participantData.role === "participant",
+              orgAdmin: participantData.orgAdmin || false,
+            };
+
             return {
               ...sessionDoc.data(),
               id: sessionDoc.id,
-              userRole: participantData.role,
-              participantData: participantData,
+              roles,
+              participantData,
             };
           }
           return null;
@@ -119,7 +127,6 @@ export const SessionProvider = ({ children }) => {
             a.participantData.joinedAt?.toMillis()
         )[0];
         setCurrentSession(mostRecent);
-        setUserRole(mostRecent.userRole);
       }
     } catch (err) {
       console.error("Error loading sessions:", err);
@@ -133,21 +140,16 @@ export const SessionProvider = ({ children }) => {
     const session = sessions.find((s) => s.id === sessionId);
     if (session) {
       setCurrentSession(session);
-      setUserRole(session.userRole);
-
-      // Store in localStorage for persistence
       localStorage.setItem("lastSessionId", sessionId);
     }
   };
 
   const refreshCurrentSession = async () => {
     if (!currentSession?.id) return;
-
     try {
       const sessionDoc = await getDoc(
         doc(db, collections.TRAINING_SESSIONS, currentSession.id)
       );
-
       if (sessionDoc.exists()) {
         const participantId = getSessionParticipantId(
           currentSession.id,
@@ -156,19 +158,19 @@ export const SessionProvider = ({ children }) => {
         const participantDoc = await getDoc(
           doc(db, collections.SESSION_PARTICIPANTS, participantId)
         );
-
         if (participantDoc.exists()) {
+          const data = participantDoc.data();
           const updated = {
             ...sessionDoc.data(),
             id: sessionDoc.id,
-            userRole: participantDoc.data().role,
-            participantData: participantDoc.data(),
+            roles: {
+              sessionAdmin: data.role === "sessionAdmin",
+              participant: data.role === "participant",
+              orgAdmin: data.orgAdmin || false,
+            },
+            participantData: data,
           };
-
           setCurrentSession(updated);
-          setUserRole(updated.userRole);
-
-          // Update in sessions list
           setSessions((prev) =>
             prev.map((s) => (s.id === updated.id ? updated : s))
           );
@@ -181,16 +183,16 @@ export const SessionProvider = ({ children }) => {
 
   const clearSession = () => {
     setCurrentSession(null);
-    setUserRole(null);
     localStorage.removeItem("lastSessionId");
   };
 
-  const isTrainer = () => userRole === "trainer";
-  const isParticipant = () => userRole === "participant";
+  // Role helpers
+  const isSessionAdmin = () => currentSession?.roles?.sessionAdmin;
+  const isOrgAdmin = () => currentSession?.roles?.orgAdmin;
+  const isParticipant = () => currentSession?.roles?.participant;
 
   const value = {
     currentSession,
-    userRole,
     sessions,
     loading,
     error,
@@ -198,7 +200,8 @@ export const SessionProvider = ({ children }) => {
     refreshCurrentSession,
     clearSession,
     loadUserSessions,
-    isTrainer,
+    isSessionAdmin,
+    isOrgAdmin,
     isParticipant,
   };
 

@@ -1,10 +1,9 @@
-// src/services/trainingService.js
+// src/services/sessionService.js
 import {
   collection,
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   getDocs,
   getDoc,
   query,
@@ -16,26 +15,26 @@ import {
 import { db } from "../config/firebase";
 import { nanoid } from "nanoid"; // npm install nanoid
 
-export class TrainingService {
+export class SessionService {
   constructor() {
-    this.collection = "trainings";
+    this.collection = "sessions";
   }
 
-  // Create new training session
-  async createTraining(trainingData, trainerId) {
+  // Create new session
+  async createSession(sessionData, adminId) {
     try {
       const joinCode = nanoid(8).toUpperCase(); // Generate unique join code
 
-      const training = {
-        ...trainingData,
-        trainerId,
+      const session = {
+        ...sessionData,
+        createdBy: adminId,
+        sessionAdmins: [adminId],
         joinCode,
-        participantIds: [],
         status: "active",
-        isPublic: trainingData.isPublic || false,
-        maxParticipants: trainingData.maxParticipants || null,
-        registrationOpen: trainingData.registrationOpen !== false,
-        scoringCategories: trainingData.scoringCategories || {
+        isPublic: sessionData.isPublic || false,
+        maxParticipants: sessionData.maxParticipants || null,
+        registrationOpen: sessionData.registrationOpen !== false,
+        scoringCategories: sessionData.scoringCategories || {
           positive: {
             participation: {
               name: "Active Participation",
@@ -56,38 +55,38 @@ export class TrainingService {
             absence: { name: "Unexcused Absence", icon: "X", points: -10 },
           },
         },
-        scoringScale: { min: -50, max: 50 },
+        scoringScale: sessionData.scoringScale || { min: -50, max: 50 },
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      const docRef = await addDoc(collection(db, this.collection), training);
-      return { id: docRef.id, ...training };
+      const docRef = await addDoc(collection(db, this.collection), session);
+      return { id: docRef.id, ...session };
     } catch (error) {
-      console.error("Error creating training:", error);
-      throw new Error("Failed to create training session");
+      console.error("Error creating session:", error);
+      throw new Error("Failed to create session");
     }
   }
 
-  // Get training by ID
-  async getTraining(trainingId) {
+  // Get session by ID
+  async getSession(sessionId) {
     try {
-      const trainingRef = doc(db, this.collection, trainingId);
-      const trainingDoc = await getDoc(trainingRef);
+      const sessionRef = doc(db, this.collection, sessionId);
+      const sessionDoc = await getDoc(sessionRef);
 
-      if (!trainingDoc.exists()) {
-        throw new Error("Training session not found");
+      if (!sessionDoc.exists()) {
+        throw new Error("Session not found");
       }
 
-      return { id: trainingDoc.id, ...trainingDoc.data() };
+      return { id: sessionDoc.id, ...sessionDoc.data() };
     } catch (error) {
-      console.error("Error fetching training:", error);
-      throw new Error("Failed to fetch training session");
+      console.error("Error fetching session:", error);
+      throw new Error("Failed to fetch session");
     }
   }
 
-  // Get training by join code
-  async getTrainingByJoinCode(joinCode) {
+  // Get session by join code
+  async getSessionByJoinCode(joinCode) {
     try {
       const q = query(
         collection(db, this.collection),
@@ -102,24 +101,24 @@ export class TrainingService {
         throw new Error("Invalid or expired join code");
       }
 
-      const trainingDoc = querySnapshot.docs[0];
-      return { id: trainingDoc.id, ...trainingDoc.data() };
+      const sessionDoc = querySnapshot.docs[0];
+      return { id: sessionDoc.id, ...sessionDoc.data() };
     } catch (error) {
-      console.error("Error fetching training by join code:", error);
-      throw new Error("Failed to find training session");
+      console.error("Error fetching session by join code:", error);
+      throw new Error("Failed to find session");
     }
   }
 
-  // Get all trainings for a trainer
-  async getTrainerTrainings(trainerId) {
-    if (!trainerId) {
-      console.warn("getTrainerTrainings called without trainerId");
+  // Get all sessions for an admin (sessions where they are in sessionAdmins)
+  async getAdminSessions(adminId) {
+    if (!adminId) {
+      console.warn("getAdminSessions called without adminId");
       return [];
     }
     try {
       const q = query(
         collection(db, this.collection),
-        where("trainerId", "==", trainerId),
+        where("sessionAdmins", "array-contains", adminId),
         where("status", "==", "active"),
         orderBy("createdAt", "desc")
       );
@@ -127,49 +126,49 @@ export class TrainingService {
       const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
-      console.error("Error fetching trainer trainings:", error);
-      throw new Error("Failed to fetch training sessions");
+      console.error("Error fetching admin sessions:", error);
+      throw new Error("Failed to fetch admin sessions");
     }
   }
 
-  // Update training
-  async updateTraining(trainingId, updateData) {
+  // Update session
+  async updateSession(sessionId, updateData) {
     try {
-      const trainingRef = doc(db, this.collection, trainingId);
+      const sessionRef = doc(db, this.collection, sessionId);
       const updatedData = {
         ...updateData,
         updatedAt: serverTimestamp(),
       };
 
-      await updateDoc(trainingRef, updatedData);
-      return { id: trainingId, ...updatedData };
+      await updateDoc(sessionRef, updatedData);
+      return { id: sessionId, ...updatedData };
     } catch (error) {
-      console.error("Error updating training:", error);
-      throw new Error("Failed to update training session");
+      console.error("Error updating session:", error);
+      throw new Error("Failed to update session");
     }
   }
 
-  // Soft delete training
-  async deleteTraining(trainingId) {
+  // Soft delete session
+  async deleteSession(sessionId) {
     try {
-      const trainingRef = doc(db, this.collection, trainingId);
-      await updateDoc(trainingRef, {
+      const sessionRef = doc(db, this.collection, sessionId);
+      await updateDoc(sessionRef, {
         status: "deleted",
         deletedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
       return true;
     } catch (error) {
-      console.error("Error deleting training:", error);
-      throw new Error("Failed to delete training session");
+      console.error("Error deleting session:", error);
+      throw new Error("Failed to delete session");
     }
   }
 
-  // End/close training session
-  async endTraining(trainingId) {
+  // End/close session
+  async endSession(sessionId) {
     try {
-      const trainingRef = doc(db, this.collection, trainingId);
-      await updateDoc(trainingRef, {
+      const sessionRef = doc(db, this.collection, sessionId);
+      await updateDoc(sessionRef, {
         status: "completed",
         endedAt: serverTimestamp(),
         registrationOpen: false,
@@ -177,16 +176,16 @@ export class TrainingService {
       });
       return true;
     } catch (error) {
-      console.error("Error ending training:", error);
-      throw new Error("Failed to end training session");
+      console.error("Error ending session:", error);
+      throw new Error("Failed to end session");
     }
   }
 
   // Toggle registration
-  async toggleRegistration(trainingId, isOpen) {
+  async toggleRegistration(sessionId, isOpen) {
     try {
-      const trainingRef = doc(db, this.collection, trainingId);
-      await updateDoc(trainingRef, {
+      const sessionRef = doc(db, this.collection, sessionId);
+      await updateDoc(sessionRef, {
         registrationOpen: isOpen,
         updatedAt: serverTimestamp(),
       });
@@ -198,12 +197,12 @@ export class TrainingService {
   }
 
   // Generate new join code
-  async regenerateJoinCode(trainingId) {
+  async regenerateJoinCode(sessionId) {
     try {
       const newJoinCode = nanoid(8).toUpperCase();
-      const trainingRef = doc(db, this.collection, trainingId);
+      const sessionRef = doc(db, this.collection, sessionId);
 
-      await updateDoc(trainingRef, {
+      await updateDoc(sessionRef, {
         joinCode: newJoinCode,
         updatedAt: serverTimestamp(),
       });
@@ -215,38 +214,43 @@ export class TrainingService {
     }
   }
 
-  // Get training statistics
-  async getTrainingStats(trainingId) {
+  // Get session statistics (counts participants from participants collection)
+  async getSessionStats(sessionId) {
     try {
-      const training = await this.getTraining(trainingId);
+      const session = await this.getSession(sessionId);
 
-      // Get participants count (you'd integrate with ParticipantService here)
-      const participantCount = training.participantIds?.length || 0;
+      // Get participant count by querying participants collection
+      const participantsQuery = query(
+        collection(db, "participants"),
+        where("sessionId", "==", sessionId)
+      );
+      const participantsSnapshot = await getDocs(participantsQuery);
+      const participantCount = participantsSnapshot.size || 0;
 
       // Calculate other stats
       const stats = {
         totalParticipants: participantCount,
-        maxParticipants: training.maxParticipants,
-        registrationOpen: training.registrationOpen,
-        status: training.status,
-        daysRunning: training.createdAt
+        maxParticipants: session.maxParticipants,
+        registrationOpen: session.registrationOpen,
+        status: session.status,
+        daysRunning: session.createdAt
           ? Math.floor(
-              (new Date() - training.createdAt.toDate()) / (1000 * 60 * 60 * 24)
+              (new Date() - session.createdAt.toDate()) / (1000 * 60 * 60 * 24)
             )
           : 0,
-        joinCode: training.joinCode,
-        joinUrl: `${window.location.origin}/join/${training.joinCode}`,
+        joinCode: session.joinCode,
+        joinUrl: `${window.location.origin}/join/${session.joinCode}`,
       };
 
       return stats;
     } catch (error) {
-      console.error("Error fetching training stats:", error);
-      throw new Error("Failed to fetch training statistics");
+      console.error("Error fetching session stats:", error);
+      throw new Error("Failed to fetch session statistics");
     }
   }
 
-  // Search trainings (for public discovery)
-  async searchPublicTrainings(searchTerm, limitCount = 20) {
+  // Search sessions (for public discovery)
+  async searchPublicSessions(searchTerm, limitCount = 20) {
     try {
       const q = query(
         collection(db, this.collection),
@@ -258,7 +262,7 @@ export class TrainingService {
       );
 
       const querySnapshot = await getDocs(q);
-      const trainings = [];
+      const sessions = [];
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -269,55 +273,55 @@ export class TrainingService {
           data.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           data.cohort?.toLowerCase().includes(searchTerm.toLowerCase())
         ) {
-          trainings.push({
+          sessions.push({
             id: doc.id,
             ...data,
             // Don't expose sensitive data in public search
             joinCode: undefined,
-            trainerId: undefined,
+            sessionAdmins: undefined,
           });
         }
       });
 
-      return trainings;
+      return sessions;
     } catch (error) {
-      console.error("Error searching public trainings:", error);
-      throw new Error("Failed to search public training sessions");
+      console.error("Error searching public sessions:", error);
+      throw new Error("Failed to search public sessions");
     }
   }
 
-  // Duplicate/clone training
-  async cloneTraining(trainingId, newName) {
+  // Duplicate/clone session
+  async cloneSession(sessionId, newName) {
     try {
-      const originalTraining = await this.getTraining(trainingId);
+      const originalSession = await this.getSession(sessionId);
 
-      const clonedTrainingData = {
-        ...originalTraining,
-        name: newName || `${originalTraining.name} (Copy)`,
-        participantIds: [], // Start fresh with no participants
+      const clonedSessionData = {
+        ...originalSession,
+        name: newName || `${originalSession.name} (Copy)`,
+        // start fresh with no participants
         status: "active",
         registrationOpen: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
       // Remove fields that shouldn't be cloned
-      delete clonedTrainingData.id;
-      delete clonedTrainingData.createdAt;
-      delete clonedTrainingData.updatedAt;
-      delete clonedTrainingData.endedAt;
-      delete clonedTrainingData.deletedAt;
+      delete clonedSessionData.id;
+      delete clonedSessionData.endedAt;
+      delete clonedSessionData.deletedAt;
 
-      return await this.createTraining(
-        clonedTrainingData,
-        originalTraining.trainerId
+      return await this.createSession(
+        clonedSessionData,
+        originalSession.createdBy
       );
     } catch (error) {
-      console.error("Error cloning training:", error);
-      throw new Error("Failed to clone training session");
+      console.error("Error cloning session:", error);
+      throw new Error("Failed to clone session");
     }
   }
 
-  // Get training templates (predefined training configurations)
-  getTrainingTemplates() {
+  // Get session templates (predefined session configurations)
+  getSessionTemplates() {
     return [
       {
         id: "basic-workshop",

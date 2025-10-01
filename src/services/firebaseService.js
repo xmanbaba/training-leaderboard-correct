@@ -30,124 +30,98 @@ import { collections, userRoles } from "../config/firestoreSchema";
 export const authService = {
   // Register new user (store doc at /users/{uid})
   async register(email, password, userData) {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const user = userCredential.user;
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    const user = userCredential.user;
 
-      // Create (or overwrite) user document with UID as doc ID.
-      await setDoc(doc(db, collections.USERS, user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: userData.displayName || "",
-        role: userData.role || userRoles.PARTICIPANT,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+    // Create user document with UID as doc ID.
+    await setDoc(doc(db, collections.USERS, user.uid), {
+      uid: user.uid,
+      email: user.email,
+      displayName: userData.displayName || "",
+      role: userData.role || userRoles.PARTICIPANT,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
 
-      return user;
-    } catch (error) {
-      throw error;
-    }
+    return user;
   },
 
-  // Sign in user
   async signIn(email, password) {
-    try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      return userCredential.user;
-    } catch (error) {
-      throw error;
-    }
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    return userCredential.user;
   },
 
-  // Sign out user
   async signOut() {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      throw error;
-    }
+    await signOut(auth);
   },
 
-  // Listen to auth state changes
   onAuthStateChanged(callback) {
     return onAuthStateChanged(auth, callback);
   },
 };
 
 // ===============================
-// TRAINING SERVICES
+// SESSION SERVICES
 // ===============================
-export const trainingService = {
-  // Create new training
-  async createTraining(trainingData) {
-    try {
-      const docRef = await addDoc(collection(db, collections.TRAININGS), {
-        ...trainingData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      return docRef.id;
-    } catch (error) {
-      throw error;
-    }
+export const sessionService = {
+  // Create new session (any signed-in user can do this)
+  async createSession(sessionData, creatorId, orgId = null) {
+    const session = {
+      ...sessionData,
+      createdBy: creatorId,
+      organizationId: orgId || null,
+      sessionAdmins: [creatorId], // creator is always admin
+      status: "active",
+      registrationOpen: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collection(db, collections.SESSIONS), session);
+    return { id: docRef.id, ...session };
   },
 
-  // Get training by ID
-  async getTraining(trainingId) {
-    try {
-      if (!trainingId) return null;
-      const docSnap = await getDoc(doc(db, collections.TRAININGS, trainingId));
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() };
-      }
-      return null;
-    } catch (error) {
-      throw error;
-    }
+  async getSession(sessionId) {
+    if (!sessionId) return null;
+    const docRef = doc(db, collections.SESSIONS, sessionId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
   },
 
-  // Get trainings by trainer (safe if trainerId missing)
-  async getTrainingsByTrainer(trainerId) {
-    try {
-      if (!trainerId) return []; // guard against undefined -> where(..., undefined)
-      const q = query(
-        collection(db, collections.TRAININGS),
-        where("createdBy", "==", trainerId),
-        orderBy("createdAt", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    } catch (error) {
-      throw error;
-    }
+  async getAdminSessions(userId) {
+    if (!userId) return [];
+    const q = query(
+      collection(db, collections.SESSIONS),
+      where("sessionAdmins", "array-contains", userId),
+      orderBy("createdAt", "desc")
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
   },
 
-  // Update training
-  async updateTraining(trainingId, updates) {
-    try {
-      if (!trainingId) throw new Error("trainingId is required");
-      await updateDoc(doc(db, collections.TRAININGS, trainingId), {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      throw error;
-    }
+  async updateSession(sessionId, updates) {
+    if (!sessionId) throw new Error("sessionId is required");
+    const sessionRef = doc(db, collections.SESSIONS, sessionId);
+    await updateDoc(sessionRef, { ...updates, updatedAt: serverTimestamp() });
   },
 
-  // Listen to training changes
-  onTrainingSnapshot(trainingId, callback) {
-    if (!trainingId) return () => {};
-    return onSnapshot(doc(db, collections.TRAININGS, trainingId), callback);
+  async endSession(sessionId) {
+    if (!sessionId) return;
+    const sessionRef = doc(db, collections.SESSIONS, sessionId);
+    await updateDoc(sessionRef, {
+      status: "completed",
+      registrationOpen: false,
+      endedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
   },
 };
 
@@ -155,55 +129,36 @@ export const trainingService = {
 // PARTICIPANT SERVICES
 // ===============================
 export const participantService = {
-  // Add participant to training
   async addParticipant(participantData) {
-    try {
-      const docRef = await addDoc(collection(db, collections.PARTICIPANTS), {
-        ...participantData,
-        joinedAt: serverTimestamp(),
-        status: "active",
-      });
-      return docRef.id;
-    } catch (error) {
-      throw error;
-    }
+    const docRef = await addDoc(collection(db, collections.PARTICIPANTS), {
+      ...participantData,
+      joinedAt: serverTimestamp(),
+      status: "active",
+    });
+    return docRef.id;
   },
 
-  // Get participants by training
-  async getParticipantsByTraining(trainingId) {
-    try {
-      if (!trainingId) return [];
-      const q = query(
-        collection(db, collections.PARTICIPANTS),
-        where("trainingId", "==", trainingId),
-        where("status", "==", "active")
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Update participant
-  async updateParticipant(participantId, updates) {
-    try {
-      if (!participantId) throw new Error("participantId is required");
-      await updateDoc(
-        doc(db, collections.PARTICIPANTS, participantId),
-        updates
-      );
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Listen to participants changes (returns no-op if no trainingId)
-  onParticipantsSnapshot(trainingId, callback) {
-    if (!trainingId) return () => {};
+  async getParticipantsBySession(sessionId) {
+    if (!sessionId) return [];
     const q = query(
       collection(db, collections.PARTICIPANTS),
-      where("trainingId", "==", trainingId),
+      where("sessionId", "==", sessionId),
+      where("status", "==", "active")
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
+
+  async updateParticipant(participantId, updates) {
+    if (!participantId) throw new Error("participantId required");
+    await updateDoc(doc(db, collections.PARTICIPANTS, participantId), updates);
+  },
+
+  onParticipantsSnapshot(sessionId, callback) {
+    if (!sessionId) return () => {};
+    const q = query(
+      collection(db, collections.PARTICIPANTS),
+      where("sessionId", "==", sessionId),
       where("status", "==", "active")
     );
     return onSnapshot(q, callback);
@@ -214,72 +169,43 @@ export const participantService = {
 // SCORING SERVICES
 // ===============================
 export const scoringService = {
-  // Award score to participant
   async awardScore(scoreData) {
-    try {
-      const docRef = await addDoc(collection(db, collections.SCORES), {
-        ...scoreData,
-        timestamp: serverTimestamp(),
-      });
+    const docRef = await addDoc(collection(db, collections.SCORES), {
+      ...scoreData,
+      timestamp: serverTimestamp(),
+    });
 
-      // Also log this as an activity
-      await addDoc(collection(db, collections.ACTIVITIES), {
-        trainingId: scoreData.trainingId,
-        participantId: scoreData.participantId,
-        type: "score_awarded",
-        description: `${scoreData.value > 0 ? "Earned" : "Lost"} ${Math.abs(
-          scoreData.value
-        )} points for ${scoreData.category}`,
-        points: scoreData.value,
-        category: scoreData.category,
-        timestamp: serverTimestamp(),
-      });
+    await addDoc(collection(db, collections.ACTIVITIES), {
+      sessionId: scoreData.sessionId,
+      participantId: scoreData.participantId,
+      type: "score_awarded",
+      description: `${scoreData.value > 0 ? "Earned" : "Lost"} ${Math.abs(
+        scoreData.value
+      )} points for ${scoreData.category}`,
+      points: scoreData.value,
+      category: scoreData.category,
+      timestamp: serverTimestamp(),
+    });
 
-      return docRef.id;
-    } catch (error) {
-      throw error;
-    }
+    return docRef.id;
   },
 
-  // Get scores for participant
-  async getParticipantScores(participantId, trainingId) {
-    try {
-      if (!participantId || !trainingId) return [];
-      const q = query(
-        collection(db, collections.SCORES),
-        where("participantId", "==", participantId),
-        where("trainingId", "==", trainingId),
-        orderBy("timestamp", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Get all scores for a training
-  async getTrainingScores(trainingId) {
-    try {
-      if (!trainingId) return [];
-      const q = query(
-        collection(db, collections.SCORES),
-        where("trainingId", "==", trainingId),
-        orderBy("timestamp", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Listen to scores changes
-  onScoresSnapshot(trainingId, callback) {
-    if (!trainingId) return () => {};
+  async getScoresBySession(sessionId) {
+    if (!sessionId) return [];
     const q = query(
       collection(db, collections.SCORES),
-      where("trainingId", "==", trainingId),
+      where("sessionId", "==", sessionId),
+      orderBy("timestamp", "desc")
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
+
+  onScoresSnapshot(sessionId, callback) {
+    if (!sessionId) return () => {};
+    const q = query(
+      collection(db, collections.SCORES),
+      where("sessionId", "==", sessionId),
       orderBy("timestamp", "desc")
     );
     return onSnapshot(q, callback);
@@ -290,29 +216,23 @@ export const scoringService = {
 // ACTIVITY SERVICES
 // ===============================
 export const activityService = {
-  // Get recent activities for training (limitCount default 10)
-  async getRecentActivities(trainingId, limitCount = 10) {
-    try {
-      if (!trainingId) return [];
-      const q = query(
-        collection(db, collections.ACTIVITIES),
-        where("trainingId", "==", trainingId),
-        orderBy("timestamp", "desc"),
-        firestoreLimit(limitCount)
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Listen to activities changes
-  onActivitiesSnapshot(trainingId, callback, limitCount = 10) {
-    if (!trainingId) return () => {};
+  async getRecentActivities(sessionId, limitCount = 10) {
+    if (!sessionId) return [];
     const q = query(
       collection(db, collections.ACTIVITIES),
-      where("trainingId", "==", trainingId),
+      where("sessionId", "==", sessionId),
+      orderBy("timestamp", "desc"),
+      firestoreLimit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
+
+  onActivitiesSnapshot(sessionId, callback, limitCount = 10) {
+    if (!sessionId) return () => {};
+    const q = query(
+      collection(db, collections.ACTIVITIES),
+      where("sessionId", "==", sessionId),
       orderBy("timestamp", "desc"),
       firestoreLimit(limitCount)
     );
@@ -324,32 +244,38 @@ export const activityService = {
 // USER SERVICES
 // ===============================
 export const userService = {
-  // Get user by UID (doc id == uid)
   async getUser(userId) {
-    try {
-      if (!userId) return null;
-      const docRef = doc(db, collections.USERS, userId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() };
-      }
-      return null;
-    } catch (error) {
-      throw error;
-    }
+    if (!userId) return null;
+    const docSnap = await getDoc(doc(db, collections.USERS, userId));
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
   },
 
-  // Update user (doc id == uid)
   async updateUser(userId, updates) {
-    try {
-      if (!userId) throw new Error("userId is required");
-      const userDocRef = doc(db, collections.USERS, userId);
-      await updateDoc(userDocRef, {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      throw error;
-    }
+    if (!userId) throw new Error("userId required");
+    const userRef = doc(db, collections.USERS, userId);
+    await updateDoc(userRef, { ...updates, updatedAt: serverTimestamp() });
+  },
+};
+
+// ===============================
+// ORGANIZATION SERVICES
+// ===============================
+export const orgService = {
+  async createOrganization(orgData, creatorId) {
+    const org = {
+      ...orgData,
+      createdBy: creatorId,
+      members: [creatorId],
+      admins: [creatorId], // creator is org admin
+      createdAt: serverTimestamp(),
+    };
+    const docRef = await addDoc(collection(db, collections.ORGANIZATIONS), org);
+    return { id: docRef.id, ...org };
+  },
+
+  async getOrganization(orgId) {
+    if (!orgId) return null;
+    const docSnap = await getDoc(doc(db, collections.ORGANIZATIONS, orgId));
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
   },
 };

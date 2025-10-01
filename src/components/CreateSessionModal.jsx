@@ -1,4 +1,4 @@
-// src/components/CreateSessionModal.jsx
+// src/components/CreateSessionModal.jsx - Fixed with proper scrolling
 import React, { useState } from "react";
 import {
   X,
@@ -17,7 +17,7 @@ import { SessionService } from "../services/sessionService";
 import { useAuth } from "../contexts/AuthContext";
 
 const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
-  const { userProfile } = useAuth(); // Changed from 'user' to 'userProfile'
+  const { userProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -95,7 +95,6 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       setLoading(true);
       setError("");
 
-      // Check if userProfile exists
       if (!userProfile?.uid) {
         throw new Error("User profile not found. Please try signing in again.");
       }
@@ -144,7 +143,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       console.log("Creating session with admin ID:", userProfile.uid);
       const newSession = await sessionService.createSession(
         sessionData,
-        userProfile.uid // Use userProfile.uid instead of user.uid
+        userProfile.uid
       );
 
       console.log("Session created successfully:", newSession);
@@ -152,7 +151,6 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       setSuccess("Session created successfully!");
       setActiveStep(3);
 
-      // Call the callback to update parent component
       if (onSessionCreated) {
         onSessionCreated(newSession);
       }
@@ -189,10 +187,10 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-8 flex flex-col max-h-[calc(100vh-4rem)]">
+        {/* Header - Fixed */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Create Session</h2>
             <p className="text-gray-600 mt-1">
@@ -207,8 +205,8 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
           </button>
         </div>
 
-        {/* Progress Steps */}
-        <div className="px-6 py-4 border-b border-gray-100">
+        {/* Progress Steps - Fixed */}
+        <div className="px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center space-x-4">
             {[1, 2, 3].map((step) => (
               <div key={step} className="flex items-center">
@@ -254,8 +252,8 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 max-h-[60vh] overflow-y-auto">
+        {/* Content - Scrollable */}
+        <div className="p-6 overflow-y-auto flex-1">
           {/* Step 1 */}
           {activeStep === 1 && (
             <div className="space-y-6">
@@ -627,8 +625,8 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 p-6">
+        {/* Footer - Fixed at bottom */}
+        <div className="border-t border-gray-200 p-6 flex-shrink-0 bg-white">
           {activeStep === 3 ? (
             <div className="flex justify-end">
               <button

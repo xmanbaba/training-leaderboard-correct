@@ -1,4 +1,4 @@
-// src/components/AddParticipantModal.jsx
+// src/components/AddParticipantModal.jsx - Fixed version
 import React, { useState, useRef } from "react";
 import {
   X,
@@ -20,10 +20,10 @@ import { ParticipantService } from "../services/participantService";
 const AddParticipantModal = ({
   isOpen,
   onClose,
-  trainingId,
+  sessionId, // Changed from trainingId to sessionId
   onParticipantAdded,
 }) => {
-  const [activeTab, setActiveTab] = useState("single"); // 'single' or 'bulk'
+  const [activeTab, setActiveTab] = useState("single");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -68,6 +68,11 @@ const AddParticipantModal = ({
       return;
     }
 
+    if (!sessionId) {
+      setError("No session selected. Please select a session first.");
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
@@ -79,13 +84,18 @@ const AddParticipantModal = ({
         department: formData.department.trim() || null,
       };
 
+      console.log("Creating participant for session:", sessionId);
       const newParticipant = await participantService.createParticipant(
         participantData,
-        trainingId
+        sessionId
       );
 
+      console.log("Participant created:", newParticipant);
       setSuccess("Participant added successfully!");
-      onParticipantAdded(newParticipant);
+
+      if (onParticipantAdded) {
+        onParticipantAdded(newParticipant);
+      }
 
       // Reset form after success
       setTimeout(() => {
@@ -93,6 +103,7 @@ const AddParticipantModal = ({
         handleClose();
       }, 1500);
     } catch (err) {
+      console.error("Error creating participant:", err);
       setError(err.message || "Failed to add participant");
     } finally {
       setLoading(false);
@@ -190,14 +201,27 @@ const AddParticipantModal = ({
       return;
     }
 
+    if (!sessionId) {
+      setError("No session selected. Please select a session first.");
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
 
+      console.log(
+        "Bulk uploading",
+        csvData.length,
+        "participants to session:",
+        sessionId
+      );
       const results = await participantService.bulkCreateParticipants(
         csvData,
-        trainingId
+        sessionId
       );
+
+      console.log("Bulk upload results:", results);
       setBulkResults(results);
 
       if (results.successful.length > 0) {
@@ -206,10 +230,13 @@ const AddParticipantModal = ({
         );
         // Notify parent of new participants
         results.successful.forEach((participant) => {
-          onParticipantAdded(participant);
+          if (onParticipantAdded) {
+            onParticipantAdded(participant);
+          }
         });
       }
     } catch (err) {
+      console.error("Error bulk uploading:", err);
       setError(err.message || "Failed to upload participants");
     } finally {
       setLoading(false);
@@ -236,7 +263,14 @@ const AddParticipantModal = ({
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900">Add Participants</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Add Participants
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Add participants to your session individually or in bulk
+            </p>
+          </div>
           <button
             onClick={handleClose}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -568,15 +602,15 @@ const AddParticipantModal = ({
 
           {/* Success/Error Messages */}
           {success && (
-            <div className="flex items-center space-x-2 text-green-600 bg-green-50 border border-green-200 rounded-lg p-3">
-              <CheckCircle className="h-4 w-4" />
+            <div className="flex items-center space-x-2 text-green-600 bg-green-50 border border-green-200 rounded-lg p-3 mt-4">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
               <span className="text-sm">{success}</span>
             </div>
           )}
 
           {error && (
-            <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-              <AlertCircle className="h-4 w-4" />
+            <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <span className="text-sm">{error}</span>
             </div>
           )}

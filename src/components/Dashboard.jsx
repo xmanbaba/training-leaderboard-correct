@@ -50,6 +50,7 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
       setError(null);
 
       console.log("Loading sessions for user:", userProfile?.uid);
+      console.log("Loading sessions for user:", userProfile?.uid);
       const adminSessions = await sessionService.getAdminSessions(
         userProfile?.uid
       );
@@ -71,10 +72,9 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
         setCurrentSession(null);
         console.log("No sessions found");
       }
-    } catch (err) {
-      console.error("Error loading sessions:", err);
-      setError("Failed to load sessions. Please try again.");
-      setLoading(false);
+    } catch (error) {
+      console.error("Failed to load sessions:", error);
+      setError("Failed to load sessions. Please try refreshing the page.");
     } finally {
       setLoading(false);
     }
@@ -82,25 +82,37 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
 
   /* ---------- Real-time participants ---------- */
   useEffect(() => {
-    if (currentSession) {
+    if (currentSession?.id) {
+      console.log(
+        "Setting up participant listener for session:",
+        currentSession.id
+      );
       const unsubscribe = participantService.subscribeToSessionParticipants(
         currentSession.id,
-        (updatedParticipants) => setParticipants(updatedParticipants)
+        (updatedParticipants) => {
+          console.log("Participants updated:", updatedParticipants);
+          setParticipants(updatedParticipants);
+        }
       );
-      return () => unsubscribe();
+      return () => {
+        console.log("Cleaning up participant listener");
+        unsubscribe();
+      };
+    } else {
+      setParticipants([]);
     }
-  }, [currentSession]);
+  }, [currentSession?.id]);
 
   /* ---------- Real-time activities ---------- */
   useEffect(() => {
-    if (participantService.subscribeToRecentActivities && currentSession) {
+    if (participantService.subscribeToRecentActivities && currentSession?.id) {
       const unsubscribe = participantService.subscribeToRecentActivities(
         currentSession.id,
         (activities) => setRecentActivities(activities)
       );
       return () => unsubscribe();
-    } else {
-      // fallback mock data
+    } else if (currentSession?.id) {
+      // Fallback mock data for development
       setRecentActivities([
         {
           id: 1,
@@ -140,25 +152,48 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
         },
       ]);
     }
-  }, [currentSession]);
+  }, [currentSession?.id]);
 
   /* ---------- Helpers ---------- */
   const handleParticipantAdded = (newParticipant) => {
     console.log("New participant added:", newParticipant);
+    // The real-time listener will automatically update the participants list
   };
 
   const handleSessionCreated = (newSession) => {
+    console.log("Session created, updating state:", newSession);
     setSessions((prev) => [newSession, ...prev]);
     setCurrentSession(newSession);
+    localStorage.setItem("lastSessionId", newSession.id);
+  };
+
+  const handleSessionSelect = (session) => {
+    console.log("Switching to session:", session);
+    setCurrentSession(session);
+    localStorage.setItem("lastSessionId", session.id);
+    setShowSessionDropdown(false);
   };
 
   /* ---------- Derived stats ---------- */
-  const averageScore = Math.round(
-    participants.reduce((sum, p) => sum + p.totalScore, 0) /
-      (participants.length || 1)
-  );
-  const topScore = Math.max(0, ...participants.map((p) => p.totalScore));
-  const sortedParticipants = getSortedParticipants(participants);
+  const averageScore =
+    participants.length > 0
+      ? Math.round(
+          participants.reduce((sum, p) => sum + (p.totalScore || 0), 0) /
+            participants.length
+        )
+      : 0;
+
+  const topScore =
+    participants.length > 0
+      ? Math.max(...participants.map((p) => p.totalScore || 0))
+      : 0;
+
+  const sortedParticipants = getSortedParticipants
+    ? getSortedParticipants(participants)
+    : [...participants].sort(
+        (a, b) => (b.totalScore || 0) - (a.totalScore || 0)
+      );
+
   const topPerformers = sortedParticipants.slice(0, 3);
 
   /* ---------- UI Components ---------- */
@@ -302,13 +337,13 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
               {participant.name}
             </p>
             <p className="text-xs text-gray-600 truncate">
-              {participant.department}
+              {participant.department || "Participant"}
             </p>
           </div>
           <div className="text-right">
             <div className="font-bold text-gray-900">
-              {participant.totalScore > 0 ? "+" : ""}
-              {participant.totalScore}
+              {(participant.totalScore || 0) > 0 ? "+" : ""}
+              {participant.totalScore || 0}
             </div>
             <div className="text-xs text-gray-500">points</div>
           </div>
@@ -317,39 +352,141 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
     );
   };
 
+  /* ---------- Loading State ---------- */
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- No Sessions State ---------- */
+  if (!loading && sessions.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6">
+        <div className="max-w-2xl mx-auto mt-20">
+          <div className="bg-white rounded-3xl p-12 text-center shadow-xl border border-gray-200">
+            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Trophy className="h-10 w-10 text-blue-600" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Welcome to Leaderboard!
+            </h2>
+            <p className="text-gray-600 mb-8 text-lg">
+              Get started by creating your first session. Sessions help you
+              organize and track participants' progress.
+            </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-medium transition-colors shadow-lg hover:shadow-xl"
+            >
+              <Plus className="h-5 w-5" />
+              <span>Create Your First Session</span>
+            </button>
+          </div>
+        </div>
+
+        {showCreateModal && (
+          <CreateSessionModal
+            isOpen={showCreateModal}
+            onClose={() => setShowCreateModal(false)}
+            onSessionCreated={handleSessionCreated}
+          />
+        )}
+      </div>
+    );
+  }
+
   /* ---------- Render ---------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6 space-y-6">
-      {/* Welcome Header */}
+      {/* Welcome Header with Session Selector */}
       <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-8 text-white">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl lg:text-4xl font-bold mb-2">
               Welcome back, {userProfile?.displayName || "Admin"}! 👋
             </h1>
-            <p className="text-blue-100 text-lg">
-              {currentSession
-                ? `Session: ${currentSession.name}`
-                : "No session selected"}
-            </p>
+
+            {/* Session Selector */}
+            {currentSession && (
+              <div className="flex items-center space-x-3 mt-4">
+                <span className="text-blue-100 text-sm">Current Session:</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSessionDropdown(!showSessionDropdown)}
+                    className="flex items-center space-x-2 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2 hover:bg-white/30 transition-colors"
+                  >
+                    <span className="font-semibold">{currentSession.name}</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+
+                  {/* Dropdown */}
+                  {showSessionDropdown && sessions.length > 1 && (
+                    <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+                      <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Switch Session
+                      </div>
+                      {sessions.map((session) => (
+                        <button
+                          key={session.id}
+                          onClick={() => handleSessionSelect(session)}
+                          className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                            currentSession.id === session.id ? "bg-blue-50" : ""
+                          }`}
+                        >
+                          <div className="font-medium text-gray-900">
+                            {session.name}
+                          </div>
+                          <div className="text-sm text-gray-500 truncate">
+                            {session.description}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
           <div className="flex flex-col sm:flex-row gap-4">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-center hover:bg-white/30"
+              className="flex items-center justify-center space-x-2 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 hover:bg-white/30 transition-colors"
             >
-              Create Session
+              <Plus className="h-5 w-5" />
+              <span>Create Session</span>
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 text-center hover:bg-white/30"
+              className="flex items-center justify-center space-x-2 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-3 hover:bg-white/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!currentSession}
             >
-              Add Participant
+              <Users className="h-5 w-5" />
+              <span>Add Participant</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
+          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <Activity className="h-5 w-5 text-red-600" />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-red-900">Error</p>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
@@ -357,7 +494,6 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
           title="Total Participants"
           value={participants.length}
           subtitle="Active learners"
-          trend="+12%"
           variant="blue"
         />
         <StatCard
@@ -365,7 +501,6 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
           title="Average Score"
           value={averageScore}
           subtitle="Team performance"
-          trend="+8%"
           variant="green"
         />
         <StatCard
@@ -373,7 +508,6 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
           title="Highest Score"
           value={topScore}
           subtitle="Current leader"
-          trend="+15%"
           variant="orange"
         />
         <StatCard
@@ -384,6 +518,7 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
           variant="purple"
         />
       </div>
+
       {/* Main Content */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Top Performers */}
@@ -396,17 +531,24 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
               </h3>
             </div>
             <div className="p-6 space-y-4">
-              {topPerformers.map((participant, index) => (
-                <TopPerformerCard
-                  key={participant.id}
-                  participant={participant}
-                  index={index}
-                />
-              ))}
-              {topPerformers.length === 0 && (
+              {topPerformers.length > 0 ? (
+                topPerformers.map((participant, index) => (
+                  <TopPerformerCard
+                    key={participant.id}
+                    participant={participant}
+                    index={index}
+                  />
+                ))
+              ) : (
                 <div className="text-center py-8 text-gray-500">
                   <Trophy className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>No participants yet</p>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
+                  >
+                    Add your first participant
+                  </button>
                 </div>
               )}
             </div>
@@ -441,6 +583,7 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
           </div>
         </div>
       </div>
+
       {/* Team Progress & Achievements */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Team Progress */}
@@ -452,46 +595,54 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
             </h3>
           </div>
           <div className="p-6 space-y-6">
-            {mockGroups.map((group) => {
-              const groupScore = participants
-                .filter((p) => group.participantIds.includes(p.id))
-                .reduce((sum, p) => sum + p.totalScore, 0);
-              const progressPercentage = Math.max(
-                0,
-                Math.min(100, (groupScore / 50) * 100)
-              );
-              return (
-                <div key={group.id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        {group.name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {group.participantIds.length} members
-                      </p>
+            {mockGroups.length > 0 ? (
+              mockGroups.map((group) => {
+                const groupScore = participants
+                  .filter((p) => group.participantIds?.includes(p.id))
+                  .reduce((sum, p) => sum + (p.totalScore || 0), 0);
+                const progressPercentage = Math.max(
+                  0,
+                  Math.min(100, (groupScore / 50) * 100)
+                );
+                return (
+                  <div key={group.id} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {group.name}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {group.participantIds?.length || 0} members
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-gray-900">{groupScore}</p>
+                        <p className="text-sm text-gray-500">points</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900">{groupScore}</p>
-                      <p className="text-sm text-gray-500">points</p>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: `${progressPercentage}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Progress</span>
+                      <span>{Math.round(progressPercentage)}%</span>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${progressPercentage}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Progress</span>
-                    <span>{Math.round(progressPercentage)}%</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Building2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No teams yet</p>
+              </div>
+            )}
           </div>
         </div>
-        /* Recent Achievements */
+
+        {/* Recent Achievements */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
@@ -500,28 +651,29 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            {participants.slice(0, 3).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold">
-                  {p.name.charAt(0)}
+            {participants.slice(0, 3).length > 0 ? (
+              participants.slice(0, 3).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold">
+                    {p.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">
+                      {p.name}
+                    </p>
+                    <p className="text-sm text-gray-500 truncate">
+                      Achievement unlocked
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <Clock className="h-4 w-4 text-gray-400" />
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">
-                    {p.name}
-                  </p>
-                  <p className="text-sm text-gray-500 truncate">
-                    Achievement unlocked
-                  </p>
-                </div>
-                <div className="text-right">
-                  <Clock className="h-4 w-4 text-gray-400" />
-                </div>
-              </div>
-            ))}
-            {participants.length === 0 && (
+              ))
+            ) : (
               <div className="text-center py-8 text-gray-500">
                 <Award className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>No achievements yet</p>
@@ -530,20 +682,20 @@ const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
           </div>
         </div>
       </div>
-      /* Modals */
-      {showAddModal && (
-        <AddParticipantModal
-          sessionId={currentSession?.id}
-          onClose={() => setShowAddModal(false)}
-          onParticipantAdded={handleParticipantAdded}
-        />
-      )}
-      {showCreateModal && (
-        <CreateSessionModal
-          onClose={() => setShowCreateModal(false)}
-          onSessionCreated={handleSessionCreated}
-        />
-      )}
+
+      {/* Modals */}
+      <AddParticipantModal
+        isOpen={showAddModal}
+        sessionId={currentSession?.id}
+        onClose={() => setShowAddModal(false)}
+        onParticipantAdded={handleParticipantAdded}
+      />
+
+      <CreateSessionModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSessionCreated={handleSessionCreated}
+      />
     </div>
   );
 };

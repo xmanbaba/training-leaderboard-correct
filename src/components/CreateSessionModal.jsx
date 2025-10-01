@@ -17,7 +17,7 @@ import { SessionService } from "../services/sessionService";
 import { useAuth } from "../contexts/AuthContext";
 
 const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
-  const { user } = useAuth();
+  const { userProfile } = useAuth(); // Changed from 'user' to 'userProfile'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -95,6 +95,11 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       setLoading(true);
       setError("");
 
+      // Check if userProfile exists
+      if (!userProfile?.uid) {
+        throw new Error("User profile not found. Please try signing in again.");
+      }
+
       const templates = sessionService.getSessionTemplates();
       const selectedTemplate = templates.find(
         (t) => t.id === formData.template
@@ -136,15 +141,23 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
         scoringScale: formData.scoringScale,
       };
 
+      console.log("Creating session with admin ID:", userProfile.uid);
       const newSession = await sessionService.createSession(
         sessionData,
-        user.uid
+        userProfile.uid // Use userProfile.uid instead of user.uid
       );
+
+      console.log("Session created successfully:", newSession);
       setCreatedSession(newSession);
       setSuccess("Session created successfully!");
       setActiveStep(3);
-      onSessionCreated(newSession);
+
+      // Call the callback to update parent component
+      if (onSessionCreated) {
+        onSessionCreated(newSession);
+      }
     } catch (err) {
+      console.error("Error creating session:", err);
       setError(err.message || "Failed to create session");
     } finally {
       setLoading(false);
@@ -157,6 +170,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       try {
         await navigator.clipboard.writeText(joinUrl);
         setSuccess("Join URL copied to clipboard!");
+        setTimeout(() => setSuccess(""), 3000);
       } catch {
         const textArea = document.createElement("textarea");
         textArea.value = joinUrl;
@@ -165,6 +179,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
         document.execCommand("copy");
         document.body.removeChild(textArea);
         setSuccess("Join URL copied to clipboard!");
+        setTimeout(() => setSuccess(""), 3000);
       }
     }
   };
@@ -253,7 +268,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Session Name"
+                  placeholder="e.g., Web Development Bootcamp 2024"
                 />
               </div>
               <div>
@@ -267,7 +282,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
                   }
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Describe session details..."
+                  placeholder="Describe what this session is about..."
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -282,7 +297,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
                       handleInputChange("cohort", e.target.value)
                     }
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Spring 2024 Batch"
+                    placeholder="e.g., Spring 2024 Batch"
                   />
                 </div>
                 <div>
@@ -298,7 +313,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
                         handleInputChange("location", e.target.value)
                       }
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Room / Online"
+                      placeholder="Room 101 / Online"
                     />
                   </div>
                 </div>
@@ -566,7 +581,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
                   <ul className="mt-2 space-y-1 list-disc list-inside">
                     <li>Visiting the join URL directly</li>
                     <li>Entering the join code on the platform</li>
-                    <li>Being added manually by the trainer</li>
+                    <li>Being added manually by an admin</li>
                   </ul>
                 </div>
               </div>
@@ -598,7 +613,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
           {/* Error Message */}
           {error && (
             <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
-              <AlertCircle className="h-4 w-4" />
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <span className="text-sm">{error}</span>
             </div>
           )}
@@ -606,7 +621,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
           {/* Success Message (non-step 3) */}
           {success && activeStep !== 3 && (
             <div className="flex items-center space-x-2 text-green-600 bg-green-50 border border-green-200 rounded-lg p-3 mt-4">
-              <CheckCircle className="h-4 w-4" />
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
               <span className="text-sm">{success}</span>
             </div>
           )}

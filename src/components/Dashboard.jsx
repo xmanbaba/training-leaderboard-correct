@@ -1,4 +1,4 @@
-// Dashboard.jsx
+// Dashboard.jsx - Fixed version with proper session management
 import React, { useState, useEffect } from "react";
 import {
   Users,
@@ -11,6 +11,8 @@ import {
   Star,
   Award,
   Activity,
+  Plus,
+  ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ParticipantService } from "../services/participantService";
@@ -18,7 +20,7 @@ import { SessionService } from "../services/sessionService";
 import AddParticipantModal from "./AddParticipantModal";
 import CreateSessionModal from "./CreateSessionModal";
 
-const Dashboard = ({ mockGroups, getSortedParticipants }) => {
+const Dashboard = ({ mockGroups = [], getSortedParticipants }) => {
   const { userProfile } = useAuth();
 
   /* ---------- State ---------- */
@@ -27,27 +29,54 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
   const [currentSession, setCurrentSession] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSessionDropdown, setShowSessionDropdown] = useState(false);
   const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const participantService = new ParticipantService();
   const sessionService = new SessionService();
 
-  /* ---------- Load sessions ---------- */
+  /* ---------- Load sessions on mount ---------- */
   useEffect(() => {
-    loadSessions();
-  }, []);
+    if (userProfile?.uid) {
+      loadSessions();
+    }
+  }, [userProfile]);
 
   const loadSessions = async () => {
     try {
+      setLoading(true);
+      setError(null);
+
+      console.log("Loading sessions for user:", userProfile?.uid);
       const adminSessions = await sessionService.getAdminSessions(
         userProfile?.uid
       );
+
+      console.log("Loaded sessions:", adminSessions);
       setSessions(adminSessions);
+
+      // Auto-select first session or restore last selected
       if (adminSessions.length > 0) {
-        setCurrentSession(adminSessions[0]);
+        const lastSessionId = localStorage.getItem("lastSessionId");
+        const sessionToSelect = lastSessionId
+          ? adminSessions.find((s) => s.id === lastSessionId) ||
+            adminSessions[0]
+          : adminSessions[0];
+
+        setCurrentSession(sessionToSelect);
+        console.log("Selected session:", sessionToSelect);
+      } else {
+        setCurrentSession(null);
+        console.log("No sessions found");
       }
-    } catch (error) {
-      console.error("Failed to load sessions:", error);
+    } catch (err) {
+      console.error("Error loading sessions:", err);
+      setError("Failed to load sessions. Please try again.");
+      setLoading(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -321,7 +350,6 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
           </div>
         </div>
       </div>
-
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
@@ -356,7 +384,6 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
           variant="purple"
         />
       </div>
-
       {/* Main Content */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Top Performers */}
@@ -414,7 +441,6 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
           </div>
         </div>
       </div>
-
       {/* Team Progress & Achievements */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Team Progress */}
@@ -465,8 +491,7 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
             })}
           </div>
         </div>
-
-        {/* Recent Achievements */}
+        /* Recent Achievements */
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
@@ -505,8 +530,7 @@ const Dashboard = ({ mockGroups, getSortedParticipants }) => {
           </div>
         </div>
       </div>
-
-      {/* Modals */}
+      /* Modals */
       {showAddModal && (
         <AddParticipantModal
           sessionId={currentSession?.id}

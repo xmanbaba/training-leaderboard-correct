@@ -11,7 +11,7 @@ import Leaderboard from "./components/Leaderboard";
 import QuickScoring from "./components/QuickScoring";
 import Participants from "./components/Participants";
 import Settings from "./components/Settings";
-import ParticipantJoin from "./components/ParticipantJoin"
+import ParticipantJoin from "./components/ParticipantJoin";
 import {
   mockTrainings,
   mockParticipants,
@@ -92,10 +92,9 @@ const MainAppLayout = () => {
     );
   };
 
-const handleParticipantAdded = (newParticipant) => {
-  setParticipants((prev) => [...prev, newParticipant]);
-};
-
+  const handleParticipantAdded = (newParticipant) => {
+    setParticipants((prev) => [...prev, newParticipant]);
+  };
 
   // Helper function to get sorted participants
   const getSortedParticipants = () => {
@@ -199,7 +198,6 @@ const handleParticipantAdded = (newParticipant) => {
                   />
                 }
               />
-              <Route path="/join/:joinCode" element={<ParticipantJoin />} />
               <Route
                 path="/settings"
                 element={
@@ -236,9 +234,10 @@ export default function App() {
     <AuthProvider>
       <Router>
         <Routes>
-          {/* Public route - Authentication/Landing page */}
+          {/* Public routes - No authentication required */}
           <Route path="/auth" element={<Home />} />
-
+          <Route path="/join/:joinCode" element={<ParticipantJoin />} />{" "}
+          {/* ✅ MOVED HERE - PUBLIC */}
           {/* Protected routes - Main application */}
           <Route
             path="/*"

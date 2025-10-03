@@ -210,7 +210,7 @@ const ParticipantJoin = () => {
 
       // Redirect to participant dashboard after 2 seconds
       setTimeout(() => {
-        navigate("/participant/dashboard", {
+        navigate("/dashboard", {
           state: { sessionId: session.id, welcomeMessage: true },
         });
       }, 2000);

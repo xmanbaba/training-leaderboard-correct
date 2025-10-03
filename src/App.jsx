@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// src/App.jsx
+import React from "react";
 import "./App.css";
 import {
   BrowserRouter as Router,
@@ -7,26 +8,22 @@ import {
   Navigate,
 } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { SessionProvider } from "./contexts/SessionContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Home from "./components/Auth/Home";
-import Header from "./components/Header";
-import Navigation from "./components/Navigation";
+import SessionLayout from "./components/SessionLayout";
 import Dashboard from "./components/Dashboard";
 import Leaderboard from "./components/Leaderboard";
-import QuickScoring from "./components/QuickScoring";
 import Participants from "./components/Participants";
-import Settings from "./components/Settings";
 import ParticipantJoin from "./components/ParticipantJoin";
-import ParticipantDashboard from "./components/ParticipantDashboard"; // You'll need to create this
-import LandingPage from "./components/LandingPage"; // You'll need to create this
-import {
-  mockTrainings,
-  mockParticipants,
-  mockGroups,
-  scoringCategories,
-} from "./data/mockData";
+import SessionSelector from "./components/SessionSelector";
+import LandingPage from "./components/LandingPage";
+import RoleGuard from "./components/RoleGuard";
+import QuickScoring from "./components/QuickScoring";
+import Settings from "./components/Settings";
+import { mockGroups, scoringCategories } from "./data/mockData";
 
-// Improved level system based on cumulative positive contributions
+// Helper function for level calculation
 const calculateLevel = (participant) => {
   const positiveContributions = Object.entries(participant.scores || {})
     .filter(([key]) => scoringCategories.positive[key])
@@ -63,202 +60,102 @@ const calculateLevel = (participant) => {
   };
 };
 
-// Main App Layout Component (for authenticated admin/trainer users)
-const MainAppLayout = () => {
-  const [participants, setParticipants] = useState(mockParticipants);
-  const [scoringMode, setScoringMode] = useState("individual");
-  const [scoringScale, setScoringScale] = useState({ min: -10, max: 10 });
-  const [selectedTraining] = useState(mockTrainings[0]);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const updateParticipantScore = (participantId, category, change) => {
-    setParticipants((prevParticipants) =>
-      prevParticipants.map((participant) => {
-        if (participant.id === participantId) {
-          const newScores = {
-            ...participant.scores,
-            [category]: (participant.scores[category] || 0) + change,
-          };
-
-          const newTotalScore = Object.values(newScores).reduce(
-            (sum, score) => sum + score,
-            0
-          );
-
-          return {
-            ...participant,
-            scores: newScores,
-            totalScore: newTotalScore,
-          };
-        }
-        return participant;
-      })
-    );
-  };
-
-  const handleParticipantAdded = (newParticipant) => {
-    setParticipants((prev) => [...prev, newParticipant]);
-  };
-
-  const getSortedParticipants = (participantList = participants) => {
-    return [...participantList].sort(
-      (a, b) => (b.totalScore || 0) - (a.totalScore || 0)
-    );
-  };
-
-  const getSortedGroups = () => {
-    return mockGroups
-      .map((group) => ({
-        ...group,
-        totalScore: participants
-          .filter((p) => group.participantIds?.includes(p.id))
-          .reduce((sum, p) => sum + (p.totalScore || 0), 0),
-        participantCount: group.participantIds?.length || 0,
-      }))
-      .sort((a, b) => b.totalScore - a.totalScore);
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {!sidebarCollapsed && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm z-40"
-          onClick={() => setSidebarCollapsed(true)}
-        />
-      )}
-
-      <Header
-        selectedTraining={selectedTraining}
-        sidebarCollapsed={sidebarCollapsed}
-        setSidebarCollapsed={setSidebarCollapsed}
-        participants={participants}
-      />
-
-      <div className="flex">
-        <Navigation
-          collapsed={sidebarCollapsed}
-          setCollapsed={setSidebarCollapsed}
-        />
-
-        <main
-          className={`flex-1 transition-all duration-300 ease-in-out ${
-            sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
-          }`}
-          role="main"
-        >
-          <div className="p-4 lg:p-6 max-w-7xl mx-auto">
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <Dashboard
-                    participants={participants}
-                    mockGroups={mockGroups}
-                    getSortedParticipants={getSortedParticipants}
-                    calculateLevel={calculateLevel}
-                  />
-                }
-              />
-              <Route
-                path="/leaderboard"
-                element={
-                  <Leaderboard
-                    scoringMode={scoringMode}
-                    setScoringMode={setScoringMode}
-                    getSortedParticipants={getSortedParticipants}
-                    getSortedGroups={getSortedGroups}
-                    scoringCategories={scoringCategories}
-                    calculateLevel={calculateLevel}
-                  />
-                }
-              />
-              <Route
-                path="/quick-scoring"
-                element={
-                  <QuickScoring
-                    participants={participants}
-                    scoringCategories={scoringCategories}
-                    scoringScale={scoringScale}
-                    updateParticipantScore={updateParticipantScore}
-                    calculateLevel={calculateLevel}
-                  />
-                }
-              />
-              <Route
-                path="/participants"
-                element={
-                  <Participants
-                    participants={participants}
-                    mockGroups={mockGroups}
-                    calculateLevel={calculateLevel}
-                    selectedTraining={selectedTraining}
-                    onParticipantAdded={handleParticipantAdded}
-                  />
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <Settings
-                    selectedTraining={selectedTraining}
-                    scoringScale={scoringScale}
-                    setScoringScale={setScoringScale}
-                  />
-                }
-              />
-              <Route
-                path="*"
-                element={
-                  <div className="text-center py-12">
-                    <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                      404
-                    </h1>
-                    <p className="text-gray-600">Page not found</p>
-                  </div>
-                }
-              />
-            </Routes>
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-};
-
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/auth" element={<Home />} />
-          <Route path="/join/:joinCode" element={<ParticipantJoin />} />
+      <SessionProvider>
+        <Router>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/auth" element={<Home />} />
+            <Route path="/join/:joinCode" element={<ParticipantJoin />} />
+            <Route path="/join" element={<ParticipantJoin />} />
 
-          {/* Protected admin/trainer routes */}
-          <Route
-            path="/admin/*"
-            element={
-              <ProtectedRoute>
-                <MainAppLayout />
-              </ProtectedRoute>
-            }
-          />
+            {/* Protected: Session Selector */}
+            <Route
+              path="/sessions"
+              element={
+                <ProtectedRoute>
+                  <SessionSelector />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Protected participant routes */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute requireRole="participant">
-                <ParticipantDashboard />
-              </ProtectedRoute>
-            }
-          />
+            {/* Protected: Session-based routes (with layout) */}
+            <Route
+              path="/session/:sessionId"
+              element={
+                <ProtectedRoute>
+                  <SessionLayout />
+                </ProtectedRoute>
+              }
+            >
+              {/* Dashboard - accessible to all */}
+              <Route
+                path="dashboard"
+                element={<Dashboard mockGroups={mockGroups} />}
+              />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+              {/* Leaderboard - accessible to all */}
+              <Route
+                path="leaderboard"
+                element={<Leaderboard scoringCategories={scoringCategories} />}
+              />
+
+              {/* Participants - accessible to all */}
+              <Route
+                path="participants"
+                element={
+                  <Participants
+                    mockGroups={mockGroups}
+                    calculateLevel={calculateLevel}
+                  />
+                }
+              />
+
+              {/* Quick Scoring - Admin only */}
+              <Route
+                path="quick-scoring"
+                element={
+                  <RoleGuard requireAdmin={true}>
+                    <QuickScoring
+                      scoringCategories={scoringCategories}
+                      calculateLevel={calculateLevel}
+                    />
+                  </RoleGuard>
+                }
+              />
+
+              {/* Settings - Admin only */}
+              <Route
+                path="settings"
+                element={
+                  <RoleGuard requireAdmin={true}>
+                    <Settings />
+                  </RoleGuard>
+                }
+              />
+
+              {/* Default redirect to dashboard */}
+              <Route path="" element={<Navigate to="dashboard" replace />} />
+            </Route>
+
+            {/* Legacy admin routes - redirect to sessions */}
+            <Route
+              path="/admin/*"
+              element={<Navigate to="/sessions" replace />}
+            />
+            <Route
+              path="/dashboard"
+              element={<Navigate to="/sessions" replace />}
+            />
+
+            {/* Fallback - redirect to home or sessions based on auth */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </SessionProvider>
     </AuthProvider>
   );
 }

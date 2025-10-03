@@ -2,6 +2,7 @@
 import {
   collection,
   doc,
+  setDoc,
   addDoc,
   updateDoc,
   getDocs,
@@ -13,17 +14,22 @@ import {
   limit,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { nanoid } from "nanoid"; // npm install nanoid
+import { nanoid } from "nanoid";
+import {
+  collections,
+  getSessionParticipantId,
+  schemas,
+} from "../config/firestoreSchema";
 
 export class SessionService {
   constructor() {
-    this.collection = "sessions";
+    this.collection = collections.TRAINING_SESSIONS;
   }
 
-  // Create new session
+  // Create new session AND add creator as sessionAdmin participant
   async createSession(sessionData, adminId) {
     try {
-      const joinCode = nanoid(8).toUpperCase(); // Generate unique join code
+      const joinCode = nanoid(8).toUpperCase();
 
       const session = {
         ...sessionData,
@@ -60,11 +66,32 @@ export class SessionService {
         updatedAt: serverTimestamp(),
       };
 
+      // Create session document
       const docRef = await addDoc(collection(db, this.collection), session);
-      return { id: docRef.id, ...session };
+      const sessionId = docRef.id;
+
+      // CRITICAL: Create sessionParticipant record for the admin
+      const participantId = getSessionParticipantId(sessionId, adminId);
+      const participantData = schemas.sessionParticipant(
+        sessionId,
+        adminId,
+        "sessionAdmin"
+      );
+
+      await setDoc(
+        doc(db, collections.SESSION_PARTICIPANTS, participantId),
+        participantData
+      );
+
+      console.log("Created session and admin participant:", {
+        sessionId,
+        participantId,
+      });
+
+      return { id: sessionId, ...session, joinCode };
     } catch (error) {
       console.error("Error creating session:", error);
-      throw new Error("Failed to create session");
+      throw new Error("Failed to create session: " + error.message);
     }
   }
 
@@ -109,7 +136,7 @@ export class SessionService {
     }
   }
 
-  // Get all sessions for an admin (sessions where they are in sessionAdmins)
+  // Get all sessions for an admin
   async getAdminSessions(adminId) {
     if (!adminId) {
       console.warn("getAdminSessions called without adminId");
@@ -214,20 +241,20 @@ export class SessionService {
     }
   }
 
-  // Get session statistics (counts participants from participants collection)
+  // Get session statistics
   async getSessionStats(sessionId) {
     try {
       const session = await this.getSession(sessionId);
 
-      // Get participant count by querying participants collection
+      // Get participant count from sessionParticipants collection
       const participantsQuery = query(
-        collection(db, "participants"),
-        where("sessionId", "==", sessionId)
+        collection(db, collections.SESSION_PARTICIPANTS),
+        where("sessionId", "==", sessionId),
+        where("isActive", "==", true)
       );
       const participantsSnapshot = await getDocs(participantsQuery);
       const participantCount = participantsSnapshot.size || 0;
 
-      // Calculate other stats
       const stats = {
         totalParticipants: participantCount,
         maxParticipants: session.maxParticipants,
@@ -249,7 +276,7 @@ export class SessionService {
     }
   }
 
-  // Search sessions (for public discovery)
+  // Search sessions
   async searchPublicSessions(searchTerm, limitCount = 20) {
     try {
       const q = query(
@@ -266,7 +293,6 @@ export class SessionService {
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        // Filter by search term if provided
         if (
           !searchTerm ||
           data.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -276,7 +302,6 @@ export class SessionService {
           sessions.push({
             id: doc.id,
             ...data,
-            // Don't expose sensitive data in public search
             joinCode: undefined,
             sessionAdmins: undefined,
           });
@@ -290,37 +315,32 @@ export class SessionService {
     }
   }
 
-  // Duplicate/clone session
-  async cloneSession(sessionId, newName) {
+  // Clone session
+  async cloneSession(sessionId, newName, adminId) {
     try {
       const originalSession = await this.getSession(sessionId);
 
       const clonedSessionData = {
         ...originalSession,
         name: newName || `${originalSession.name} (Copy)`,
-        // start fresh with no participants
         status: "active",
         registrationOpen: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       };
 
-      // Remove fields that shouldn't be cloned
       delete clonedSessionData.id;
       delete clonedSessionData.endedAt;
       delete clonedSessionData.deletedAt;
+      delete clonedSessionData.createdAt;
+      delete clonedSessionData.updatedAt;
 
-      return await this.createSession(
-        clonedSessionData,
-        originalSession.createdBy
-      );
+      return await this.createSession(clonedSessionData, adminId);
     } catch (error) {
       console.error("Error cloning session:", error);
       throw new Error("Failed to clone session");
     }
   }
 
-  // Get session templates (predefined session configurations)
+  // Get session templates
   getSessionTemplates() {
     return [
       {

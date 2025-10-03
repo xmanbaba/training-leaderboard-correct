@@ -71,7 +71,7 @@ export default function App() {
             <Route path="/auth" element={<Home />} />
             <Route path="/join/:joinCode" element={<ParticipantJoin />} />
             <Route path="/join" element={<ParticipantJoin />} />
-
+          
             {/* Protected: Session Selector */}
             <Route
               path="/sessions"

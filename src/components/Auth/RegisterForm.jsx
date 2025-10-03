@@ -14,7 +14,15 @@ const RegisterForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp, error } = useAuth();
-  const navigate = useNavigate(); // ADD THIS
+  const navigate = useNavigate();
+
+  // ADD THIS FUNCTION
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,7 +44,7 @@ const RegisterForm = () => {
         displayName: formData.displayName,
       });
       // Redirect to session selector after successful signup
-      navigate("/sessions"); // ADD THIS
+      navigate("/sessions");
     } catch (err) {
       console.error("Registration error:", err);
     } finally {

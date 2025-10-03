@@ -22,7 +22,7 @@ import {
   onAuthStateChanged,
 } from "firebase/auth";
 import { db, auth } from "../config/firebase";
-import { collections, userRoles } from "../config/firestoreSchema";
+import { collections, roles } from "../config/firestoreSchema";
 
 // ===============================
 // AUTHENTICATION SERVICES
@@ -42,7 +42,7 @@ export const authService = {
       uid: user.uid,
       email: user.email,
       displayName: userData.displayName || "",
-      role: userData.role || userRoles.PARTICIPANT,
+      role: userData.role || roles.PARTICIPANT,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -85,13 +85,16 @@ export const sessionService = {
       updatedAt: serverTimestamp(),
     };
 
-    const docRef = await addDoc(collection(db, collections.SESSIONS), session);
+    const docRef = await addDoc(
+      collection(db, collections.TRAINING_SESSIONS),
+      session
+    );
     return { id: docRef.id, ...session };
   },
 
   async getSession(sessionId) {
     if (!sessionId) return null;
-    const docRef = doc(db, collections.SESSIONS, sessionId);
+    const docRef = doc(db, collections.TRAINING_SESSIONS, sessionId);
     const docSnap = await getDoc(docRef);
     return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
   },
@@ -99,7 +102,7 @@ export const sessionService = {
   async getAdminSessions(userId) {
     if (!userId) return [];
     const q = query(
-      collection(db, collections.SESSIONS),
+      collection(db, collections.TRAINING_SESSIONS),
       where("sessionAdmins", "array-contains", userId),
       orderBy("createdAt", "desc")
     );
@@ -109,13 +112,13 @@ export const sessionService = {
 
   async updateSession(sessionId, updates) {
     if (!sessionId) throw new Error("sessionId is required");
-    const sessionRef = doc(db, collections.SESSIONS, sessionId);
+    const sessionRef = doc(db, collections.TRAINING_SESSIONS, sessionId);
     await updateDoc(sessionRef, { ...updates, updatedAt: serverTimestamp() });
   },
 
   async endSession(sessionId) {
     if (!sessionId) return;
-    const sessionRef = doc(db, collections.SESSIONS, sessionId);
+    const sessionRef = doc(db, collections.TRAINING_SESSIONS, sessionId);
     await updateDoc(sessionRef, {
       status: "completed",
       registrationOpen: false,
@@ -170,7 +173,8 @@ export const participantService = {
 // ===============================
 export const scoringService = {
   async awardScore(scoreData) {
-    const docRef = await addDoc(collection(db, collections.SCORES), {
+    // Note: SCORES collection not defined in firestoreSchema, using generic name
+    const docRef = await addDoc(collection(db, "scores"), {
       ...scoreData,
       timestamp: serverTimestamp(),
     });
@@ -193,7 +197,7 @@ export const scoringService = {
   async getScoresBySession(sessionId) {
     if (!sessionId) return [];
     const q = query(
-      collection(db, collections.SCORES),
+      collection(db, "scores"),
       where("sessionId", "==", sessionId),
       orderBy("timestamp", "desc")
     );
@@ -204,7 +208,7 @@ export const scoringService = {
   onScoresSnapshot(sessionId, callback) {
     if (!sessionId) return () => {};
     const q = query(
-      collection(db, collections.SCORES),
+      collection(db, "scores"),
       where("sessionId", "==", sessionId),
       orderBy("timestamp", "desc")
     );

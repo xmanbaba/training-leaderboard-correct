@@ -1,5 +1,6 @@
+// src/components/Navigation.jsx - Updated for session-based roles
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import {
   BarChart3,
   Trophy,
@@ -10,54 +11,65 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
+import { useSession } from "../contexts/SessionContext";
 
 const Navigation = ({ collapsed, setCollapsed }) => {
-  const { userProfile } = useAuth();
+  const { sessionId } = useParams();
+  const { currentSession } = useSession();
 
-  const navigationItems = [
-    {
-      id: "dashboard",
-      label: "Dashboard",
-      icon: BarChart3,
-      path: "/",
-      description: "Overview & insights",
-    },
-    {
-      id: "leaderboard",
-      label: "Leaderboard",
-      icon: Trophy,
-      path: "/leaderboard",
-      description: "Rankings & competition",
-    },
-    {
-      id: "scoring",
-      label: "Quick Score",
-      icon: Plus,
-      path: "/quick-scoring",
-      description: "Award points",
-      restricted:
-        userProfile?.role !== "trainer" && userProfile?.role !== "admin",
-    },
-    {
-      id: "participants",
-      label: "Participants",
-      icon: Users,
-      path: "/participants",
-      description: "Manage learners",
-    },
-    {
-      id: "settings",
-      label: "Settings",
-      icon: Settings,
-      path: "/settings",
-      description: "Configuration",
-      restricted:
-        userProfile?.role !== "trainer" && userProfile?.role !== "admin",
-    },
-  ];
+  // Get session role - determines which items to show
+  const isSessionAdmin = currentSession?.roles?.sessionAdmin || false;
 
-  const visibleItems = navigationItems.filter((item) => !item.restricted);
+  const getNavItems = () => {
+    const baseItems = [
+      {
+        id: "dashboard",
+        label: "Dashboard",
+        icon: BarChart3,
+        path: `/session/${sessionId}/dashboard`,
+        description: "Overview & insights",
+      },
+      {
+        id: "leaderboard",
+        label: "Leaderboard",
+        icon: Trophy,
+        path: `/session/${sessionId}/leaderboard`,
+        description: "Rankings & competition",
+      },
+      {
+        id: "participants",
+        label: "Participants",
+        icon: Users,
+        path: `/session/${sessionId}/participants`,
+        description: "View learners",
+      },
+    ];
+
+    // Add admin-only items
+    if (isSessionAdmin) {
+      return [
+        ...baseItems,
+        {
+          id: "quick-scoring",
+          label: "Quick Score",
+          icon: Plus,
+          path: `/session/${sessionId}/quick-scoring`,
+          description: "Award points",
+        },
+        {
+          id: "settings",
+          label: "Settings",
+          icon: Settings,
+          path: `/session/${sessionId}/settings`,
+          description: "Configuration",
+        },
+      ];
+    }
+
+    return baseItems;
+  };
+
+  const navigationItems = getNavItems();
 
   return (
     <nav
@@ -96,7 +108,7 @@ const Navigation = ({ collapsed, setCollapsed }) => {
 
       {/* Navigation Items */}
       <div className="p-4 space-y-2">
-        {visibleItems.map((item) => (
+        {navigationItems.map((item) => (
           <NavLink
             key={item.id}
             to={item.path}
@@ -153,29 +165,35 @@ const Navigation = ({ collapsed, setCollapsed }) => {
         ))}
       </div>
 
-      {/* Bottom Section - Progress Card */}
-      {!collapsed && (
+      {/* Bottom Section - Session Info */}
+      {!collapsed && currentSession && (
         <div className="absolute bottom-0 left-0 right-0 p-4">
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
             <div className="text-center">
               <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl mx-auto mb-3 flex items-center justify-center">
                 <TrendingUp className="h-6 w-6 text-white" />
               </div>
-              <h4 className="font-semibold text-gray-900 text-sm mb-1">
-                Session Progress
+              <h4 className="font-semibold text-gray-900 text-sm mb-1 truncate">
+                {currentSession.name}
               </h4>
-              <p className="text-xs text-gray-600 mb-3">
-                Training completion status
+              <p className="text-xs text-gray-600 mb-3 truncate">
+                {currentSession.cohort || "Training Session"}
               </p>
 
-              {/* Progress Bar */}
-              <div className="w-full bg-blue-100 rounded-full h-2 mb-2">
-                <div
-                  className="bg-gradient-to-r from-blue-600 to-indigo-700 h-2 rounded-full transition-all duration-1000"
-                  style={{ width: "68%" }}
-                />
+              {/* Role Badge */}
+              <div className="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium bg-white">
+                {isSessionAdmin ? (
+                  <>
+                    <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                    <span className="text-amber-700">Admin</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span className="text-blue-700">Participant</span>
+                  </>
+                )}
               </div>
-              <p className="text-xs text-gray-600">68% Complete</p>
             </div>
           </div>
         </div>
@@ -188,7 +206,7 @@ const Navigation = ({ collapsed, setCollapsed }) => {
             <Target className="h-5 w-5 text-white" />
             {/* Tooltip */}
             <div className="absolute left-16 bg-gray-900 text-white px-3 py-2 rounded-lg text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 pointer-events-none">
-              Progress: 68%
+              Active Session
             </div>
           </div>
         </div>

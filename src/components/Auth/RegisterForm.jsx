@@ -1,5 +1,6 @@
 // src/components/Auth/RegisterForm.jsx
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
 
@@ -13,13 +14,7 @@ const RegisterForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp, error } = useAuth();
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const navigate = useNavigate(); // ADD THIS
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,7 +35,8 @@ const RegisterForm = () => {
       await signUp(formData.email, formData.password, {
         displayName: formData.displayName,
       });
-      // On success, user will be redirected by AuthContext
+      // Redirect to session selector after successful signup
+      navigate("/sessions"); // ADD THIS
     } catch (err) {
       console.error("Registration error:", err);
     } finally {

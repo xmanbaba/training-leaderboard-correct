@@ -1,5 +1,6 @@
 // src/components/Auth/LoginForm.jsx
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 
@@ -9,6 +10,7 @@ const LoginForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signIn, error } = useAuth();
+  const navigate = useNavigate(); // ADD THIS
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,6 +18,8 @@ const LoginForm = () => {
 
     try {
       await signIn(email, password);
+      // Redirect to session selector after successful login
+      navigate("/sessions"); // ADD THIS
     } catch (err) {
       console.error("Login error:", err);
     } finally {

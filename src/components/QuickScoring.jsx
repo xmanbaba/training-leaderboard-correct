@@ -15,7 +15,8 @@ import {
   Filter,
   X,
 } from "lucide-react";
-
+import { useSession } from "../contexts/SessionContext";
+import { Navigate } from "react-router-dom";
 import { ParticipantService } from "../services/participantService";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -33,6 +34,7 @@ export default function QuickScoring({
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [toasts, setToasts] = useState([]);
   const backdropRef = useRef(null);
+  
 
   // search + filter state
   const [searchQuery, setSearchQuery] = useState("");

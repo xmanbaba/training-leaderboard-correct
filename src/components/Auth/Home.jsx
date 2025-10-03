@@ -10,9 +10,9 @@ const Home = () => {
   const [isLogin, setIsLogin] = useState(true);
   const { user, loading } = useAuth();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated - CHANGE THIS
   if (user && !loading) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/sessions" replace />; // Changed from "/" to "/sessions"
   }
 
   if (loading) {
@@ -172,6 +172,3 @@ const Home = () => {
 };
 
 export default Home;
-
-
-

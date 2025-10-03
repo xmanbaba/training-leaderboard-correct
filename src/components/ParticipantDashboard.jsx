@@ -1,49 +1,79 @@
 // src/components/ParticipantDashboard.jsx
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Trophy, TrendingUp, Award, Target, Star, Users } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ParticipantService } from "../services/participantService";
 import { SessionService } from "../services/sessionService";
+import { collections } from "../config/firestoreSchema";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+import { db } from "../config/firebase";
 
 const ParticipantDashboard = () => {
   const { user, userProfile } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { sessionId } = useParams();
 
   const [myParticipantData, setMyParticipantData] = useState(null);
   const [session, setSession] = useState(null);
   const [allParticipants, setAllParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const participantService = new ParticipantService();
   const sessionService = new SessionService();
 
   useEffect(() => {
-    loadParticipantData();
-  }, [user]);
+    if (user?.uid) {
+      loadParticipantData();
+    }
+  }, [user, sessionId]);
 
   const loadParticipantData = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      // Get sessionId from navigation state or find user's sessions
-      const sessionId = location.state?.sessionId;
+      // Get sessionId from URL params, navigation state, or find user's sessions
+      let targetSessionId = sessionId || location.state?.sessionId;
 
-      if (!sessionId) {
-        // TODO: Query participant's sessions
-        console.log("No session ID provided");
-        setLoading(false);
-        return;
+      if (!targetSessionId) {
+        // Query for user's sessions
+        const q = query(
+          collection(db, collections.SESSION_PARTICIPANTS),
+          where("userId", "==", user.uid),
+          where("isActive", "==", true),
+          orderBy("joinedAt", "desc"),
+          limit(1)
+        );
+
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          const participantData = snapshot.docs[0].data();
+          targetSessionId = participantData.sessionId;
+        } else {
+          console.log("No sessions found for user");
+          setLoading(false);
+          return;
+        }
       }
 
       // Load session data
-      const sessionData = await sessionService.getSession(sessionId);
+      const sessionData = await sessionService.getSession(targetSessionId);
       setSession(sessionData);
 
       // Load all participants for leaderboard
       const participants = await participantService.getSessionParticipants(
-        sessionId
+        targetSessionId
       );
       setAllParticipants(participants);
 
@@ -52,6 +82,7 @@ const ParticipantDashboard = () => {
       setMyParticipantData(myData);
     } catch (error) {
       console.error("Error loading participant data:", error);
+      setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
@@ -59,7 +90,7 @@ const ParticipantDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your dashboard...</p>
@@ -68,16 +99,18 @@ const ParticipantDashboard = () => {
     );
   }
 
-  if (!session) {
+  if (error || !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
-          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            No Session Found
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-6 md:p-8 text-center">
+          <Trophy className="h-12 w-12 md:h-16 md:w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
+            {error || "No Session Found"}
           </h2>
-          <p className="text-gray-600 mb-6">
-            You haven't joined any sessions yet.
+          <p className="text-sm md:text-base text-gray-600 mb-6">
+            {error
+              ? "Please try again later."
+              : "You haven't joined any sessions yet."}
           </p>
           <button
             onClick={() => navigate("/")}
@@ -99,14 +132,14 @@ const ParticipantDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         {/* Welcome Banner */}
         {location.state?.welcomeMessage && (
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-6 text-white">
-            <h1 className="text-3xl font-bold mb-2">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-4 md:p-6 text-white">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">
               Welcome to {session.name}! 🎉
             </h1>
-            <p className="text-green-100">
+            <p className="text-sm md:text-base text-green-100">
               You're all set! Start participating to earn points and climb the
               leaderboard.
             </p>
@@ -114,70 +147,82 @@ const ParticipantDashboard = () => {
         )}
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white">
-          <h1 className="text-3xl font-bold mb-2">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 md:p-8 text-white">
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">
             Welcome, {userProfile?.displayName || "Participant"}!
           </h1>
-          <p className="text-blue-100">{session.name}</p>
+          <p className="text-sm md:text-base text-blue-100">{session.name}</p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-2xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
-                <Trophy className="h-6 w-6 text-white" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
+                <Trophy className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{myScore}</p>
-            <p className="text-sm font-medium text-gray-600">Your Score</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">
+              {myScore}
+            </p>
+            <p className="text-xs md:text-sm font-medium text-gray-600">
+              Your Score
+            </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center">
-                <Target className="h-6 w-6 text-white" />
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center">
+                <Target className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-gray-900">#{myRank}</p>
-            <p className="text-sm font-medium text-gray-600">Your Rank</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">
+              #{myRank}
+            </p>
+            <p className="text-xs md:text-sm font-medium text-gray-600">
+              Your Rank
+            </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-white" />
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-gray-900">
+            <p className="text-xl md:text-2xl font-bold text-gray-900">
               {myScore > 0 ? "+" + myScore : myScore}
             </p>
-            <p className="text-sm font-medium text-gray-600">Progress</p>
+            <p className="text-xs md:text-sm font-medium text-gray-600">
+              Progress
+            </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center">
-                <Users className="h-6 w-6 text-white" />
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center">
+                <Users className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-gray-900">
+            <p className="text-xl md:text-2xl font-bold text-gray-900">
               {allParticipants.length}
             </p>
-            <p className="text-sm font-medium text-gray-600">Participants</p>
+            <p className="text-xs md:text-sm font-medium text-gray-600">
+              Participants
+            </p>
           </div>
         </div>
 
         {/* Leaderboard */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
-            <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <Trophy className="h-5 w-5 text-amber-600 mr-2" />
+          <div className="px-4 md:px-6 py-3 md:py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
+            <h3 className="text-base md:text-lg font-bold text-gray-900 flex items-center">
+              <Trophy className="h-4 w-4 md:h-5 md:w-5 text-amber-600 mr-2" />
               Leaderboard
             </h3>
           </div>
-          <div className="p-6">
-            <div className="space-y-3">
+          <div className="p-4 md:p-6">
+            <div className="space-y-2 md:space-y-3">
               {allParticipants
                 .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
                 .slice(0, 10)
@@ -186,14 +231,14 @@ const ParticipantDashboard = () => {
                   return (
                     <div
                       key={participant.id}
-                      className={`flex items-center space-x-4 p-4 rounded-xl transition-all ${
+                      className={`flex items-center space-x-3 md:space-x-4 p-3 md:p-4 rounded-xl transition-all ${
                         isMe
                           ? "bg-blue-50 border-2 border-blue-200"
                           : "bg-gray-50 hover:bg-gray-100"
                       }`}
                     >
                       <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                        className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold flex-shrink-0 ${
                           index === 0
                             ? "bg-gradient-to-r from-amber-400 to-amber-500"
                             : index === 1
@@ -206,7 +251,7 @@ const ParticipantDashboard = () => {
                         {index + 1}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">
+                        <p className="font-semibold text-gray-900 text-sm md:text-base truncate">
                           {participant.name}
                           {isMe && (
                             <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
@@ -214,12 +259,12 @@ const ParticipantDashboard = () => {
                             </span>
                           )}
                         </p>
-                        <p className="text-sm text-gray-600 truncate">
+                        <p className="text-xs md:text-sm text-gray-600 truncate">
                           {participant.department || "Participant"}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <div className="font-bold text-gray-900">
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-bold text-gray-900 text-sm md:text-base">
                           {(participant.totalScore || 0) > 0 ? "+" : ""}
                           {participant.totalScore || 0}
                         </div>

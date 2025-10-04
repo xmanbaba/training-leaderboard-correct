@@ -1,4 +1,4 @@
-// src/components/SessionSelector.jsx - Fixed to show participant sessions
+// src/components/SessionSelector.jsx - With join code input
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -12,8 +12,16 @@ import {
   Crown,
   UserCircle,
   LogOut,
+  LogIn,
 } from "lucide-react";
-import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 import { db } from "../config/firebase";
 import { collections } from "../config/firestoreSchema";
 import CreateSessionModal from "./CreateSessionModal";
@@ -24,6 +32,7 @@ const SessionSelector = () => {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
 
   useEffect(() => {
     if (user?.uid) {
@@ -33,19 +42,18 @@ const SessionSelector = () => {
 
   const loadUserSessions = async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
-      
-      // Get all session_participants records for this user
+
       const q = query(
         collection(db, collections.SESSION_PARTICIPANTS),
         where("userId", "==", user.uid),
         where("isActive", "==", true)
       );
-      
+
       const participantSnap = await getDocs(q);
-      
+
       if (participantSnap.empty) {
         console.log("No session participants found for user:", user.uid);
         setSessions([]);
@@ -55,35 +63,43 @@ const SessionSelector = () => {
 
       console.log(`Found ${participantSnap.size} session participant records`);
 
-      // Get full session details for each participant record
-      const sessionPromises = participantSnap.docs.map(async (participantDoc) => {
-        const participantData = participantDoc.data();
-        console.log("Participant data:", participantData);
-        
-        try {
-          // Fetch the session document
-          const sessionRef = doc(db, collections.TRAINING_SESSIONS, participantData.sessionId);
-          const sessionDoc = await getDoc(sessionRef);
+      const sessionPromises = participantSnap.docs.map(
+        async (participantDoc) => {
+          const participantData = participantDoc.data();
+          console.log("Participant data:", participantData);
 
-          if (sessionDoc.exists()) {
-            const sessionData = sessionDoc.data();
-            console.log("Found session:", sessionDoc.id, sessionData.name);
-            
-            return {
-              ...sessionData,
-              id: sessionDoc.id,
-              role: participantData.role,
-              isSessionAdmin: participantData.role === "sessionAdmin",
-              isParticipant: participantData.role === "participant",
-            };
-          } else {
-            console.warn("Session not found:", participantData.sessionId);
+          try {
+            const sessionRef = doc(
+              db,
+              collections.TRAINING_SESSIONS,
+              participantData.sessionId
+            );
+            const sessionDoc = await getDoc(sessionRef);
+
+            if (sessionDoc.exists()) {
+              const sessionData = sessionDoc.data();
+              console.log("Found session:", sessionDoc.id, sessionData.name);
+
+              return {
+                ...sessionData,
+                id: sessionDoc.id,
+                role: participantData.role,
+                isSessionAdmin: participantData.role === "sessionAdmin",
+                isParticipant: participantData.role === "participant",
+              };
+            } else {
+              console.warn("Session not found:", participantData.sessionId);
+            }
+          } catch (error) {
+            console.error(
+              "Error fetching session:",
+              participantData.sessionId,
+              error
+            );
           }
-        } catch (error) {
-          console.error("Error fetching session:", participantData.sessionId, error);
+          return null;
         }
-        return null;
-      });
+      );
 
       const sessionsData = (await Promise.all(sessionPromises)).filter(Boolean);
       console.log("Loaded sessions:", sessionsData);
@@ -103,6 +119,12 @@ const SessionSelector = () => {
     loadUserSessions();
     setShowCreateModal(false);
     navigate(`/session/${newSession.id}/dashboard`);
+  };
+
+  const handleJoinWithCode = () => {
+    if (joinCode.trim().length >= 6) {
+      navigate(`/join/${joinCode.trim().toUpperCase()}`);
+    }
   };
 
   if (loading) {
@@ -129,7 +151,9 @@ const SessionSelector = () => {
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                 Welcome, {userProfile?.displayName || "User"}!
               </h1>
-              <p className="text-sm md:text-base text-gray-600">Select a session to continue</p>
+              <p className="text-sm md:text-base text-gray-600">
+                Select a session to continue
+              </p>
             </div>
           </div>
 
@@ -144,7 +168,7 @@ const SessionSelector = () => {
 
         {/* No Sessions State */}
         {sessions.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 text-center">
+          <div className="bg-white rounded-2xl shadow-lg p-6 md:p-12 text-center">
             <div className="w-16 h-16 md:w-20 md:h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6">
               <Trophy className="h-8 w-8 md:h-10 md:w-10 text-blue-600" />
             </div>
@@ -152,8 +176,45 @@ const SessionSelector = () => {
               No Sessions Yet
             </h2>
             <p className="text-sm md:text-base text-gray-600 mb-6 md:mb-8 max-w-md mx-auto">
-              Create a new session to get started, or ask a trainer for a join link to participate in an existing session.
+              Create a new session to get started, or join an existing session
+              using a join code.
             </p>
+
+            {/* Join Session Form */}
+            <div className="max-w-md mx-auto mb-6">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 md:p-6">
+                <h3 className="font-semibold text-gray-900 mb-3 text-sm md:text-base">
+                  Have a Join Code?
+                </h3>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    placeholder="Enter join code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter") {
+                        handleJoinWithCode();
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 md:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-mono uppercase text-sm md:text-base"
+                    maxLength={12}
+                  />
+                  <button
+                    onClick={handleJoinWithCode}
+                    disabled={joinCode.trim().length < 6}
+                    className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors text-sm md:text-base"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    <span>Join</span>
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Enter your session code to join instantly
+                </p>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -179,13 +240,15 @@ const SessionSelector = () => {
               <h2 className="text-lg md:text-xl font-bold text-gray-900">
                 Your Sessions ({sessions.length})
               </h2>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm md:text-base"
-              >
-                <Plus className="h-4 w-4" />
-                <span>New Session</span>
-              </button>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm md:text-base"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>New Session</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
@@ -203,10 +266,12 @@ const SessionSelector = () => {
                           {session.name}
                         </h3>
                         {session.cohort && (
-                          <p className="text-xs md:text-sm text-gray-500 truncate">{session.cohort}</p>
+                          <p className="text-xs md:text-sm text-gray-500 truncate">
+                            {session.cohort}
+                          </p>
                         )}
                       </div>
-                      
+
                       {/* Role Badge */}
                       {session.isSessionAdmin ? (
                         <div className="flex items-center space-x-1 bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-xs font-medium flex-shrink-0">
@@ -233,7 +298,9 @@ const SessionSelector = () => {
                       {session.startDate && (
                         <div className="flex items-center space-x-2">
                           <Calendar className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{new Date(session.startDate).toLocaleDateString()}</span>
+                          <span className="truncate">
+                            {new Date(session.startDate).toLocaleDateString()}
+                          </span>
                         </div>
                       )}
                       {session.location && (
@@ -245,7 +312,7 @@ const SessionSelector = () => {
                       <div className="flex items-center space-x-2">
                         <Users className="h-4 w-4 flex-shrink-0" />
                         <span className="truncate">
-                          {session.maxParticipants 
+                          {session.maxParticipants
                             ? `Max ${session.maxParticipants} participants`
                             : "Unlimited participants"}
                         </span>
@@ -255,11 +322,13 @@ const SessionSelector = () => {
                     {/* Status Badge */}
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <div className="flex items-center justify-between">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          session.registrationOpen
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-600"
-                        }`}>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            session.registrationOpen
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
                           {session.registrationOpen ? "Open" : "Closed"}
                         </span>
                         <span className="text-blue-600 group-hover:text-blue-700 font-medium text-xs md:text-sm">

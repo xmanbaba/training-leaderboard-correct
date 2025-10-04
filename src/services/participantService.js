@@ -12,8 +12,6 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
   limit,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
@@ -23,7 +21,7 @@ export class ParticipantService {
     this.collection = "participants";
     this.sessionsCollection = "sessions";
     this.scoresCollection = "scores";
-    this.activitiesCollection = "activities"; // replaces score_audit
+    this.activitiesCollection = "activities";
   }
 
   // Create new participant
@@ -33,7 +31,7 @@ export class ParticipantService {
         ...participantData,
         sessionId,
         totalScore: 0,
-        scores: {}, // category-based
+        scores: {},
         level: 1,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -42,8 +40,8 @@ export class ParticipantService {
 
       const docRef = await addDoc(collection(db, this.collection), participant);
 
-      // Add participant to session
-      await this.addParticipantToSession(sessionId, docRef.id);
+      // Don't add to session.participants array - we use sessionParticipants collection instead
+      console.log("Participant created:", docRef.id);
 
       return { id: docRef.id, ...participant };
     } catch (error) {
@@ -107,7 +105,7 @@ export class ParticipantService {
     }
   }
 
-  // Soft delete participant (set status to inactive)
+  // Soft delete participant
   async deleteParticipant(participantId) {
     try {
       const participantRef = doc(db, this.collection, participantId);
@@ -184,7 +182,7 @@ export class ParticipantService {
     }
   }
 
-  // Create activity entry (replaces audit)
+  // Create activity entry
   async createActivity(activityData) {
     try {
       await addDoc(collection(db, this.activitiesCollection), activityData);
@@ -245,39 +243,6 @@ export class ParticipantService {
     }
 
     return results;
-  }
-
-  // Add participant to session
-  async addParticipantToSession(sessionId, participantId) {
-    try {
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
-      await updateDoc(sessionRef, {
-        participants: arrayUnion(participantId),
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error("Error adding participant to session:", error);
-    }
-  }
-
-  // Remove participant from session
-  async removeParticipantFromSession(sessionId, participantId) {
-    try {
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
-      await updateDoc(sessionRef, {
-        participants: arrayRemove(participantId),
-        updatedAt: serverTimestamp(),
-      });
-
-      const participantRef = doc(db, this.collection, participantId);
-      await updateDoc(participantRef, {
-        sessionId: null,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error("Error removing participant from session:", error);
-      throw new Error("Failed to remove participant from session");
-    }
   }
 
   // Get participant by ID

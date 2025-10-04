@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/App.jsx - Fixed navigation reloading issue
 import React from "react";
 import "./App.css";
 import {
@@ -6,6 +6,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SessionProvider } from "./contexts/SessionContext";
@@ -60,6 +61,13 @@ const calculateLevel = (participant) => {
   };
 };
 
+// Wrapper component to force remount on location change
+function RouteWrapper({ children }) {
+  const location = useLocation();
+  // Use pathname as key to force remount when route changes
+  return <React.Fragment key={location.pathname}>{children}</React.Fragment>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -92,18 +100,33 @@ export default function App() {
               }
             >
               {/* Dashboard - accessible to all */}
-              <Route path="dashboard" element={<Dashboard />} />
+              <Route
+                path="dashboard"
+                element={
+                  <RouteWrapper>
+                    <Dashboard />
+                  </RouteWrapper>
+                }
+              />
 
               {/* Leaderboard - accessible to all */}
               <Route
                 path="leaderboard"
-                element={<Leaderboard scoringCategories={scoringCategories} />}
+                element={
+                  <RouteWrapper>
+                    <Leaderboard scoringCategories={scoringCategories} />
+                  </RouteWrapper>
+                }
               />
 
               {/* Participants - accessible to all */}
               <Route
                 path="participants"
-                element={<Participants calculateLevel={calculateLevel} />}
+                element={
+                  <RouteWrapper>
+                    <Participants calculateLevel={calculateLevel} />
+                  </RouteWrapper>
+                }
               />
 
               {/* Quick Scoring - Admin only */}
@@ -111,10 +134,12 @@ export default function App() {
                 path="quick-scoring"
                 element={
                   <RoleGuard requireAdmin={true}>
-                    <QuickScoring
-                      scoringCategories={scoringCategories}
-                      calculateLevel={calculateLevel}
-                    />
+                    <RouteWrapper>
+                      <QuickScoring
+                        scoringCategories={scoringCategories}
+                        calculateLevel={calculateLevel}
+                      />
+                    </RouteWrapper>
                   </RoleGuard>
                 }
               />
@@ -124,7 +149,9 @@ export default function App() {
                 path="settings"
                 element={
                   <RoleGuard requireAdmin={true}>
-                    <Settings />
+                    <RouteWrapper>
+                      <Settings />
+                    </RouteWrapper>
                   </RoleGuard>
                 }
               />

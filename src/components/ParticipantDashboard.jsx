@@ -46,12 +46,12 @@ const ParticipantDashboard = () => {
       let targetSessionId = sessionId || location.state?.sessionId;
 
       if (!targetSessionId) {
-        // Query for user's sessions
+        // Query for user's sessions - using 'participants' collection
         const q = query(
-          collection(db, collections.SESSION_PARTICIPANTS),
+          collection(db, "participants"),
           where("userId", "==", user.uid),
-          where("isActive", "==", true),
-          orderBy("joinedAt", "desc"),
+          where("status", "==", "active"),
+          orderBy("createdAt", "desc"),
           limit(1)
         );
 
@@ -60,8 +60,9 @@ const ParticipantDashboard = () => {
         if (!snapshot.empty) {
           const participantData = snapshot.docs[0].data();
           targetSessionId = participantData.sessionId;
+          console.log("Found session for user:", targetSessionId);
         } else {
-          console.log("No sessions found for user");
+          console.log("No sessions found for user:", user.uid);
           setLoading(false);
           return;
         }

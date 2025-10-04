@@ -1,4 +1,4 @@
-// src/components/ParticipantJoin.jsx - Fixed authentication flow
+// src/components/ParticipantJoin.jsx - Fixed to create sessionParticipants
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -14,13 +14,29 @@ import {
   Loader,
 } from "lucide-react";
 import { SessionService } from "../services/sessionService";
-import { ParticipantService } from "../services/participantService";
 import { useAuth } from "../contexts/AuthContext";
+import { useSession } from "../contexts/SessionContext";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  query,
+  collection,
+  where,
+  getDocs,
+} from "firebase/firestore";
+import { db } from "../config/firebase";
+import {
+  collections,
+  getSessionParticipantId,
+  schemas,
+} from "../config/firestoreSchema";
 
 const ParticipantJoin = () => {
   const { joinCode } = useParams();
   const navigate = useNavigate();
   const { user, userProfile, signUp, signIn } = useAuth();
+  const { loadUserSessions } = useSession();
 
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,9 +56,7 @@ const ParticipantJoin = () => {
   });
 
   const sessionService = new SessionService();
-  const participantService = new ParticipantService();
 
-  // Determine total steps based on auth status
   const totalSteps = user ? 2 : 3;
   const isAuthenticated = !!user;
 
@@ -50,7 +64,6 @@ const ParticipantJoin = () => {
     loadSession();
   }, [joinCode]);
 
-  // Auto-populate name and email if user is already signed in
   useEffect(() => {
     if (user && userProfile) {
       setFormData((prev) => ({
@@ -71,29 +84,19 @@ const ParticipantJoin = () => {
       console.log("Session loaded:", sessionData);
       setSession(sessionData);
 
-      // Check if max participants reached
-      if (
-        sessionData.maxParticipants &&
-        sessionData.participantIds?.length >= sessionData.maxParticipants
-      ) {
-        setError("This session is full. Registration is no longer available.");
-        return;
-      }
-
-      // Check if user is already a participant
+      // Check if user is already a participant in sessionParticipants collection
       if (user) {
-        const existingParticipants =
-          await participantService.getSessionParticipants(sessionData.id);
-        const alreadyJoined = existingParticipants.some(
-          (p) => p.userId === user.uid
+        const participantId = getSessionParticipantId(sessionData.id, user.uid);
+        const participantDoc = await getDoc(
+          doc(db, collections.SESSION_PARTICIPANTS, participantId)
         );
 
-        if (alreadyJoined) {
+        if (participantDoc.exists() && participantDoc.data().isActive) {
           setError(
             "You've already joined this session. Redirecting to dashboard..."
           );
           setTimeout(() => {
-            navigate("/participant/dashboard");
+            navigate(`/session/${sessionData.id}/dashboard`);
           }, 2000);
           return;
         }
@@ -113,10 +116,8 @@ const ParticipantJoin = () => {
 
   const handleNextFromStep1 = () => {
     if (isAuthenticated) {
-      // Skip auth step, go directly to profile completion
       setStep(2);
     } else {
-      // Go to auth step
       setStep(2);
     }
   };
@@ -125,7 +126,6 @@ const ParticipantJoin = () => {
     e.preventDefault();
 
     if (!formData.hasAccount) {
-      // Create new account
       if (formData.password !== formData.confirmPassword) {
         setError("Passwords do not match");
         return;
@@ -147,7 +147,6 @@ const ParticipantJoin = () => {
         });
 
         console.log("Account created successfully");
-        // Move to profile completion
         setStep(3);
       } catch (err) {
         console.error("Sign up error:", err);
@@ -156,7 +155,6 @@ const ParticipantJoin = () => {
         setJoining(false);
       }
     } else {
-      // Sign in existing user
       try {
         setJoining(true);
         setError("");
@@ -165,7 +163,6 @@ const ParticipantJoin = () => {
         await signIn(formData.email, formData.password);
 
         console.log("Signed in successfully");
-        // Move to profile completion
         setStep(3);
       } catch (err) {
         console.error("Sign in error:", err);
@@ -193,26 +190,56 @@ const ParticipantJoin = () => {
       setJoining(true);
       setError("");
 
-      // Create participant profile
-      const participantData = {
-        name: formData.name.trim(),
-        email: formData.email || user.email,
-        phone: formData.phone.trim() || null,
-        department: formData.department.trim() || null,
-        userId: user.uid,
-        joinMethod: "link",
-      };
+      // Check for duplicate email in this session
+      const duplicateQuery = query(
+        collection(db, collections.SESSION_PARTICIPANTS),
+        where("sessionId", "==", session.id),
+        where("email", "==", formData.email.toLowerCase()),
+        where("isActive", "==", true)
+      );
 
-      console.log("Creating participant for session:", session.id);
-      await participantService.createParticipant(participantData, session.id);
+      const duplicateSnap = await getDocs(duplicateQuery);
+      if (!duplicateSnap.empty) {
+        setError("This email is already registered for this session");
+        setJoining(false);
+        return;
+      }
+
+      // Create sessionParticipant record using the schema
+      const participantId = getSessionParticipantId(session.id, user.uid);
+      const participantData = schemas.sessionParticipant(
+        session.id,
+        user.uid,
+        "participant" // role
+      );
+
+      // Add user-provided data
+      participantData.name = formData.name.trim();
+      participantData.email = (formData.email || user.email).toLowerCase();
+      participantData.phone = formData.phone.trim() || "";
+      participantData.department = formData.department.trim() || "";
+
+      console.log(
+        "Creating sessionParticipant:",
+        participantId,
+        participantData
+      );
+
+      await setDoc(
+        doc(db, collections.SESSION_PARTICIPANTS, participantId),
+        participantData
+      );
+
+      console.log("SessionParticipant created successfully");
+
+      // Reload user sessions
+      await loadUserSessions();
 
       setSuccess(true);
 
-      // Redirect to participant dashboard after 2 seconds
+      // Redirect to session dashboard
       setTimeout(() => {
-        navigate("/dashboard", {
-          state: { sessionId: session.id, welcomeMessage: true },
-        });
+        navigate(`/session/${session.id}/dashboard`);
       }, 2000);
     } catch (err) {
       console.error("Error joining session:", err);
@@ -222,7 +249,6 @@ const ParticipantJoin = () => {
     }
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
@@ -234,7 +260,6 @@ const ParticipantJoin = () => {
     );
   }
 
-  // Error state (no session loaded)
   if (error && !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
@@ -255,7 +280,6 @@ const ParticipantJoin = () => {
     );
   }
 
-  // Success state
   if (success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-blue-50 flex items-center justify-center p-4">
@@ -372,21 +396,6 @@ const ParticipantJoin = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
-                  <Users className="h-5 w-5 text-green-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Participants
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {session?.participantIds?.length || 0}
-                      {session?.maxParticipants &&
-                        ` / ${session.maxParticipants}`}{" "}
-                      joined
-                    </p>
-                  </div>
-                </div>
-
                 {session?.cohort && (
                   <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
                     <Building className="h-5 w-5 text-purple-600" />
@@ -395,20 +404,6 @@ const ParticipantJoin = () => {
                         Cohort
                       </p>
                       <p className="text-sm text-gray-600">{session.cohort}</p>
-                    </div>
-                  </div>
-                )}
-
-                {session?.location && (
-                  <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
-                    <MapPin className="h-5 w-5 text-red-600" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Location
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {session.location}
-                      </p>
                     </div>
                   </div>
                 )}
@@ -435,10 +430,6 @@ const ParticipantJoin = () => {
                       Live leaderboard to see your progress compared to other
                       participants
                     </li>
-                    <li className="flex items-start">
-                      <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                      Achievement badges and level progression for milestones
-                    </li>
                   </ul>
                 </div>
               </div>
@@ -453,7 +444,7 @@ const ParticipantJoin = () => {
           </div>
         )}
 
-        {/* Step 2: Account Creation/Login (only for unauthenticated users) */}
+        {/* Step 2: Account Creation/Login */}
         {step === 2 && !isAuthenticated && (
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="p-6">
@@ -604,7 +595,7 @@ const ParticipantJoin = () => {
           </div>
         )}
 
-        {/* Step 2/3: Profile Completion (step 2 for authenticated, step 3 for new users) */}
+        {/* Step 2/3: Profile Completion */}
         {((step === 2 && isAuthenticated) ||
           (step === 3 && !isAuthenticated)) && (
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">

@@ -21,7 +21,7 @@ import LandingPage from "./components/LandingPage";
 import RoleGuard from "./components/RoleGuard";
 import QuickScoring from "./components/QuickScoring";
 import Settings from "./components/Settings";
-import { mockGroups, scoringCategories } from "./data/mockData";
+import { scoringCategories } from "./data/mockData";
 
 // Helper function for level calculation
 const calculateLevel = (participant) => {
@@ -71,7 +71,7 @@ export default function App() {
             <Route path="/auth" element={<Home />} />
             <Route path="/join/:joinCode" element={<ParticipantJoin />} />
             <Route path="/join" element={<ParticipantJoin />} />
-          
+
             {/* Protected: Session Selector */}
             <Route
               path="/sessions"
@@ -92,10 +92,7 @@ export default function App() {
               }
             >
               {/* Dashboard - accessible to all */}
-              <Route
-                path="dashboard"
-                element={<Dashboard mockGroups={mockGroups} />}
-              />
+              <Route path="dashboard" element={<Dashboard />} />
 
               {/* Leaderboard - accessible to all */}
               <Route
@@ -106,12 +103,7 @@ export default function App() {
               {/* Participants - accessible to all */}
               <Route
                 path="participants"
-                element={
-                  <Participants
-                    mockGroups={mockGroups}
-                    calculateLevel={calculateLevel}
-                  />
-                }
+                element={<Participants calculateLevel={calculateLevel} />}
               />
 
               {/* Quick Scoring - Admin only */}

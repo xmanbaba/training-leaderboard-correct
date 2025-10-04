@@ -1,4 +1,4 @@
-// src/components/SessionSelector.jsx
+// src/components/SessionSelector.jsx - Fixed to show participant sessions
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -13,7 +13,7 @@ import {
   UserCircle,
   LogOut,
 } from "lucide-react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { collections } from "../config/firestoreSchema";
 import CreateSessionModal from "./CreateSessionModal";
@@ -26,7 +26,9 @@ const SessionSelector = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
-    loadUserSessions();
+    if (user?.uid) {
+      loadUserSessions();
+    }
   }, [user]);
 
   const loadUserSessions = async () => {
@@ -38,41 +40,53 @@ const SessionSelector = () => {
       // Get all session_participants records for this user
       const q = query(
         collection(db, collections.SESSION_PARTICIPANTS),
-        where("userId", "==", user.uid)
+        where("userId", "==", user.uid),
+        where("isActive", "==", true)
       );
       
       const participantSnap = await getDocs(q);
       
       if (participantSnap.empty) {
+        console.log("No session participants found for user:", user.uid);
         setSessions([]);
         setLoading(false);
         return;
       }
 
-      // Get full session details
+      console.log(`Found ${participantSnap.size} session participant records`);
+
+      // Get full session details for each participant record
       const sessionPromises = participantSnap.docs.map(async (participantDoc) => {
         const participantData = participantDoc.data();
-        const sessionSnap = await getDocs(
-          query(
-            collection(db, collections.TRAINING_SESSIONS),
-            where("__name__", "==", participantData.sessionId)
-          )
-        );
+        console.log("Participant data:", participantData);
+        
+        try {
+          // Fetch the session document
+          const sessionRef = doc(db, collections.TRAINING_SESSIONS, participantData.sessionId);
+          const sessionDoc = await getDoc(sessionRef);
 
-        if (!sessionSnap.empty) {
-          const sessionDoc = sessionSnap.docs[0];
-          return {
-            ...sessionDoc.data(),
-            id: sessionDoc.id,
-            role: participantData.role,
-            isSessionAdmin: participantData.role === "sessionAdmin",
-            isParticipant: participantData.role === "participant",
-          };
+          if (sessionDoc.exists()) {
+            const sessionData = sessionDoc.data();
+            console.log("Found session:", sessionDoc.id, sessionData.name);
+            
+            return {
+              ...sessionData,
+              id: sessionDoc.id,
+              role: participantData.role,
+              isSessionAdmin: participantData.role === "sessionAdmin",
+              isParticipant: participantData.role === "participant",
+            };
+          } else {
+            console.warn("Session not found:", participantData.sessionId);
+          }
+        } catch (error) {
+          console.error("Error fetching session:", participantData.sessionId, error);
         }
         return null;
       });
 
       const sessionsData = (await Promise.all(sessionPromises)).filter(Boolean);
+      console.log("Loaded sessions:", sessionsData);
       setSessions(sessionsData);
     } catch (error) {
       console.error("Error loading sessions:", error);
@@ -86,10 +100,8 @@ const SessionSelector = () => {
   };
 
   const handleSessionCreated = (newSession) => {
-    // Reload sessions or add to list
     loadUserSessions();
     setShowCreateModal(false);
-    // Navigate to new session
     navigate(`/session/${newSession.id}/dashboard`);
   };
 
@@ -108,22 +120,22 @@ const SessionSelector = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center">
-              <Trophy className="h-6 w-6 text-white" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 md:mb-8 space-y-4 sm:space-y-0">
+          <div className="flex items-center space-x-3 md:space-x-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Trophy className="h-5 w-5 md:h-6 md:w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                 Welcome, {userProfile?.displayName || "User"}!
               </h1>
-              <p className="text-gray-600">Select a session to continue</p>
+              <p className="text-sm md:text-base text-gray-600">Select a session to continue</p>
             </div>
           </div>
 
           <button
             onClick={signOut}
-            className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm md:text-base"
           >
             <LogOut className="h-4 w-4" />
             <span>Sign Out</span>
@@ -132,27 +144,27 @@ const SessionSelector = () => {
 
         {/* No Sessions State */}
         {sessions.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Trophy className="h-10 w-10 text-blue-600" />
+          <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 text-center">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6">
+              <Trophy className="h-8 w-8 md:h-10 md:w-10 text-blue-600" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
               No Sessions Yet
             </h2>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
+            <p className="text-sm md:text-base text-gray-600 mb-6 md:mb-8 max-w-md mx-auto">
               Create a new session to get started, or ask a trainer for a join link to participate in an existing session.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-lg hover:shadow-xl"
+                className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 md:px-6 py-2 md:py-3 rounded-xl font-medium transition-colors shadow-lg hover:shadow-xl text-sm md:text-base"
               >
-                <Plus className="h-5 w-5" />
+                <Plus className="h-4 w-4 md:h-5 md:w-5" />
                 <span>Create Session</span>
               </button>
               <a
                 href="/"
-                className="inline-flex items-center justify-center space-x-2 bg-white hover:bg-gray-50 text-gray-900 px-6 py-3 rounded-xl font-medium transition-colors border-2 border-gray-200"
+                className="inline-flex items-center justify-center space-x-2 bg-white hover:bg-gray-50 text-gray-900 px-4 md:px-6 py-2 md:py-3 rounded-xl font-medium transition-colors border-2 border-gray-200 text-sm md:text-base"
               >
                 <span>Go to Home</span>
               </a>
@@ -163,76 +175,76 @@ const SessionSelector = () => {
         {/* Sessions Grid */}
         {sessions.length > 0 && (
           <>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 md:mb-6 space-y-3 sm:space-y-0">
+              <h2 className="text-lg md:text-xl font-bold text-gray-900">
                 Your Sessions ({sessions.length})
               </h2>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg"
+                className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm md:text-base"
               >
                 <Plus className="h-4 w-4" />
                 <span>New Session</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {sessions.map((session) => (
                 <div
                   key={session.id}
                   onClick={() => handleSessionClick(session.id)}
                   className="bg-white rounded-2xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
                 >
-                  <div className="p-6">
+                  <div className="p-4 md:p-6">
                     {/* Session Header */}
                     <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-1">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base md:text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-1 truncate">
                           {session.name}
                         </h3>
                         {session.cohort && (
-                          <p className="text-sm text-gray-500">{session.cohort}</p>
+                          <p className="text-xs md:text-sm text-gray-500 truncate">{session.cohort}</p>
                         )}
                       </div>
                       
                       {/* Role Badge */}
                       {session.isSessionAdmin ? (
-                        <div className="flex items-center space-x-1 bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-xs font-medium">
+                        <div className="flex items-center space-x-1 bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-xs font-medium flex-shrink-0">
                           <Crown className="h-3 w-3" />
-                          <span>Admin</span>
+                          <span className="hidden sm:inline">Admin</span>
                         </div>
                       ) : (
-                        <div className="flex items-center space-x-1 bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-xs font-medium">
+                        <div className="flex items-center space-x-1 bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-xs font-medium flex-shrink-0">
                           <UserCircle className="h-3 w-3" />
-                          <span>Participant</span>
+                          <span className="hidden sm:inline">Member</span>
                         </div>
                       )}
                     </div>
 
                     {/* Description */}
                     {session.description && (
-                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                      <p className="text-xs md:text-sm text-gray-600 mb-4 line-clamp-2">
                         {session.description}
                       </p>
                     )}
 
                     {/* Session Details */}
-                    <div className="space-y-2 text-sm text-gray-500">
+                    <div className="space-y-2 text-xs md:text-sm text-gray-500">
                       {session.startDate && (
                         <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4" />
-                          <span>{new Date(session.startDate).toLocaleDateString()}</span>
+                          <Calendar className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{new Date(session.startDate).toLocaleDateString()}</span>
                         </div>
                       )}
                       {session.location && (
                         <div className="flex items-center space-x-2">
-                          <MapPin className="h-4 w-4" />
+                          <MapPin className="h-4 w-4 flex-shrink-0" />
                           <span className="truncate">{session.location}</span>
                         </div>
                       )}
                       <div className="flex items-center space-x-2">
-                        <Users className="h-4 w-4" />
-                        <span>
+                        <Users className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">
                           {session.maxParticipants 
                             ? `Max ${session.maxParticipants} participants`
                             : "Unlimited participants"}
@@ -250,7 +262,7 @@ const SessionSelector = () => {
                         }`}>
                           {session.registrationOpen ? "Open" : "Closed"}
                         </span>
-                        <span className="text-blue-600 group-hover:text-blue-700 font-medium text-sm">
+                        <span className="text-blue-600 group-hover:text-blue-700 font-medium text-xs md:text-sm">
                           Enter →
                         </span>
                       </div>

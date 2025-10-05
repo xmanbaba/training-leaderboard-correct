@@ -1,4 +1,4 @@
-// src/components/SessionSelector.jsx - With join code input
+// src/components/SessionSelector.jsx - Fixed navigation after session creation
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -115,10 +115,33 @@ const SessionSelector = () => {
     navigate(`/session/${sessionId}/dashboard`);
   };
 
-  const handleSessionCreated = (newSession) => {
-    loadUserSessions();
+  const handleSessionCreated = async (newSession) => {
+    console.log("Session created callback received:", newSession);
+    
+    // Close modal first
     setShowCreateModal(false);
-    navigate(`/session/${newSession.id}/dashboard`);
+    
+    // Add the new session to the local state immediately for better UX
+    const enrichedSession = {
+      ...newSession,
+      role: "sessionAdmin",
+      isSessionAdmin: true,
+      isParticipant: false,
+    };
+    
+    setSessions(prev => [enrichedSession, ...prev]);
+    
+    // Navigate immediately - don't wait for reload
+    console.log("Navigating to new session:", newSession.id);
+    navigate(`/session/${newSession.id}/dashboard`, { 
+      replace: true,
+      state: { isNewSession: true }
+    });
+    
+    // Reload sessions in the background to ensure sync
+    setTimeout(() => {
+      loadUserSessions();
+    }, 500);
   };
 
   const handleJoinWithCode = () => {

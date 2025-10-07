@@ -1,93 +1,58 @@
-// src/components/ParticipantDashboard.jsx
+// src/components/ParticipantDashboard.jsx - Fixed for real-time data
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Trophy, TrendingUp, Award, Target, Star, Users } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
-import { SessionService } from "../services/sessionService";
-import { collections } from "../config/firestoreSchema";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit,
-} from "firebase/firestore";
-import { db } from "../config/firebase";
 
 const ParticipantDashboard = () => {
   const { user, userProfile } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId } = useParams();
+  const { currentSession } = useSession();
 
   const [myParticipantData, setMyParticipantData] = useState(null);
-  const [session, setSession] = useState(null);
   const [allParticipants, setAllParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   const participantService = new ParticipantService();
-  const sessionService = new SessionService();
 
+  // Real-time subscription to participants
   useEffect(() => {
-    if (user?.uid) {
-      loadParticipantData();
-    }
-  }, [user, sessionId]);
-
-  const loadParticipantData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Get sessionId from URL params, navigation state, or find user's sessions
-      let targetSessionId = sessionId || location.state?.sessionId;
-
-      if (!targetSessionId) {
-        // Query for user's sessions - using 'participants' collection
-        const q = query(
-          collection(db, "participants"),
-          where("userId", "==", user.uid),
-          where("status", "==", "active"),
-          orderBy("createdAt", "desc"),
-          limit(1)
-        );
-
-        const snapshot = await getDocs(q);
-
-        if (!snapshot.empty) {
-          const participantData = snapshot.docs[0].data();
-          targetSessionId = participantData.sessionId;
-          console.log("Found session for user:", targetSessionId);
-        } else {
-          console.log("No sessions found for user:", user.uid);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Load session data
-      const sessionData = await sessionService.getSession(targetSessionId);
-      setSession(sessionData);
-
-      // Load all participants for leaderboard
-      const participants = await participantService.getSessionParticipants(
-        targetSessionId
+    if (currentSession?.id && user?.uid) {
+      console.log(
+        "Participant Dashboard - Loading data for session:",
+        currentSession.id,
+        "user:",
+        user.uid
       );
-      setAllParticipants(participants);
+      setLoading(true);
 
-      // Find current user's participant record
-      const myData = participants.find((p) => p.userId === user.uid);
-      setMyParticipantData(myData);
-    } catch (error) {
-      console.error("Error loading participant data:", error);
-      setError("Failed to load dashboard data");
-    } finally {
+      const unsubscribe = participantService.subscribeToSessionParticipants(
+        currentSession.id,
+        (participants) => {
+          console.log(
+            "Participant Dashboard - Loaded participants:",
+            participants.length
+          );
+          setAllParticipants(participants);
+
+          // Find current user's participant record
+          const myData = participants.find((p) => p.userId === user.uid);
+          console.log("Participant Dashboard - My data:", myData);
+          setMyParticipantData(myData);
+
+          setLoading(false);
+        }
+      );
+
+      return () => unsubscribe();
+    } else {
+      setAllParticipants([]);
+      setMyParticipantData(null);
       setLoading(false);
     }
-  };
+  }, [currentSession?.id, user?.uid]);
 
   if (loading) {
     return (
@@ -100,70 +65,72 @@ const ParticipantDashboard = () => {
     );
   }
 
-  if (error || !session) {
+  if (!currentSession) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-6 md:p-8 text-center">
           <Trophy className="h-12 w-12 md:h-16 md:w-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
-            {error || "No Session Found"}
+            No Session Selected
           </h2>
           <p className="text-sm md:text-base text-gray-600 mb-6">
-            {error
-              ? "Please try again later."
-              : "You haven't joined any sessions yet."}
+            Please select a session to view your dashboard.
           </p>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/sessions")}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
           >
-            Go to Home
+            Select Session
           </button>
         </div>
       </div>
     );
   }
 
-  const myRank =
-    allParticipants
-      .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-      .findIndex((p) => p.userId === user.uid) + 1;
-
+  // Calculate user's rank
+  const sortedParticipants = [...allParticipants].sort(
+    (a, b) => (b.totalScore || 0) - (a.totalScore || 0)
+  );
+  const myRank = sortedParticipants.findIndex((p) => p.userId === user.uid) + 1;
   const myScore = myParticipantData?.totalScore || 0;
+
+  // Calculate average score
+  const averageScore =
+    allParticipants.length > 0
+      ? Math.round(
+          allParticipants.reduce((sum, p) => sum + (p.totalScore || 0), 0) /
+            allParticipants.length
+        )
+      : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
-        {/* Welcome Banner */}
-        {location.state?.welcomeMessage && (
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-4 md:p-6 text-white">
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">
-              Welcome to {session.name}! 🎉
-            </h1>
-            <p className="text-sm md:text-base text-green-100">
-              You're all set! Start participating to earn points and climb the
-              leaderboard.
-            </p>
-          </div>
-        )}
-
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 md:p-8 text-white">
           <h1 className="text-2xl md:text-3xl font-bold mb-2">
-            Welcome, {userProfile?.displayName || "Participant"}!
+            Welcome back,{" "}
+            {userProfile?.displayName ||
+              myParticipantData?.name ||
+              "Participant"}
+            ! 👋
           </h1>
-          <p className="text-sm md:text-base text-blue-100">{session.name}</p>
+          <p className="text-sm md:text-base text-blue-100">
+            {currentSession.name}
+          </p>
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+          {/* Your Score */}
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
                 <Trophy className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">
+            <p className="text-2xl md:text-3xl font-bold text-gray-900">
+              {myScore > 0 ? "+" : ""}
               {myScore}
             </p>
             <p className="text-xs md:text-sm font-medium text-gray-600">
@@ -171,41 +138,44 @@ const ParticipantDashboard = () => {
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+          {/* Your Rank */}
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center">
                 <Target className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">
-              #{myRank}
+            <p className="text-2xl md:text-3xl font-bold text-gray-900">
+              {myRank > 0 ? `#${myRank}` : "-"}
             </p>
             <p className="text-xs md:text-sm font-medium text-gray-600">
               Your Rank
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+          {/* Average Score */}
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">
-              {myScore > 0 ? "+" + myScore : myScore}
+            <p className="text-2xl md:text-3xl font-bold text-gray-900">
+              {averageScore}
             </p>
             <p className="text-xs md:text-sm font-medium text-gray-600">
-              Progress
+              Average Score
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200">
+          {/* Total Participants */}
+          <div className="bg-white rounded-2xl p-4 md:p-6 border border-gray-200 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center">
                 <Users className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
             </div>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">
+            <p className="text-2xl md:text-3xl font-bold text-gray-900">
               {allParticipants.length}
             </p>
             <p className="text-xs md:text-sm font-medium text-gray-600">
@@ -219,15 +189,13 @@ const ParticipantDashboard = () => {
           <div className="px-4 md:px-6 py-3 md:py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
             <h3 className="text-base md:text-lg font-bold text-gray-900 flex items-center">
               <Trophy className="h-4 w-4 md:h-5 md:w-5 text-amber-600 mr-2" />
-              Leaderboard
+              Top Performers
             </h3>
           </div>
           <div className="p-4 md:p-6">
-            <div className="space-y-2 md:space-y-3">
-              {allParticipants
-                .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-                .slice(0, 10)
-                .map((participant, index) => {
+            {sortedParticipants.length > 0 ? (
+              <div className="space-y-2 md:space-y-3">
+                {sortedParticipants.slice(0, 10).map((participant, index) => {
                   const isMe = participant.userId === user.uid;
                   return (
                     <div
@@ -261,7 +229,9 @@ const ParticipantDashboard = () => {
                           )}
                         </p>
                         <p className="text-xs md:text-sm text-gray-600 truncate">
-                          {participant.department || "Participant"}
+                          {participant.department ||
+                            participant.email ||
+                            "Participant"}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
@@ -274,7 +244,75 @@ const ParticipantDashboard = () => {
                     </div>
                   );
                 })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <Trophy className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm md:text-base">No participants yet</p>
+                <p className="text-xs md:text-sm mt-1">
+                  Be the first to earn points!
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Performance Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 text-center hover:shadow-lg transition-all">
+            <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-white" />
             </div>
+            <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">
+              Your Progress
+            </h3>
+            <p className="text-2xl md:text-3xl font-bold text-emerald-600 mb-1">
+              {myScore > 0 ? `+${myScore}` : myScore}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600">
+              total points earned
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 text-center hover:shadow-lg transition-all">
+            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
+              <Award className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">
+              Percentile Rank
+            </h3>
+            <p className="text-2xl md:text-3xl font-bold text-blue-600 mb-1">
+              {allParticipants.length > 0 && myRank > 0
+                ? Math.round(
+                    ((allParticipants.length - myRank + 1) /
+                      allParticipants.length) *
+                      100
+                  )
+                : 0}
+              %
+            </p>
+            <p className="text-xs md:text-sm text-gray-600">
+              of all participants
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 text-center hover:shadow-lg transition-all">
+            <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
+              <Star className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">
+              Status
+            </h3>
+            <p className="text-lg md:text-xl font-bold text-amber-600 mb-1">
+              {myRank === 1
+                ? "🏆 Leader"
+                : myRank <= 3
+                ? "🥈 Top 3"
+                : myRank <= 10
+                ? "⭐ Top 10"
+                : "📈 Active"}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600">current standing</p>
           </div>
         </div>
       </div>

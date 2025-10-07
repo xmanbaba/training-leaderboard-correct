@@ -2,9 +2,8 @@
 import {
   collection,
   doc,
-  addDoc,
+  setDoc,
   updateDoc,
-  deleteDoc,
   getDocs,
   getDoc,
   query,
@@ -15,53 +14,67 @@ import {
   limit,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
+import {
+  collections,
+  getSessionParticipantId,
+} from "../config/firestoreSchema";
 
 export class ParticipantService {
   constructor() {
-    this.collection = "participants";
-    this.sessionsCollection = "sessions";
-    this.scoresCollection = "scores";
-    this.activitiesCollection = "activities";
+    // USE THE CORRECT COLLECTION
+    this.collection = collections.SESSION_PARTICIPANTS; // "sessionParticipants"
+    this.sessionsCollection = collections.TRAINING_SESSIONS;
+    this.activitiesCollection = collections.ACTIVITIES;
   }
 
-  // Create new participant
-  async createParticipant(participantData, sessionId) {
+  // Create new participant in sessionParticipants collection
+  async createParticipant(participantData, sessionId, userId) {
     try {
+      // Generate the predictable participant ID
+      const participantId = getSessionParticipantId(sessionId, userId);
+
       const participant = {
-        ...participantData,
         sessionId,
+        userId,
+        role: "participant",
+        name: participantData.name || "",
+        email: participantData.email || "",
+        department: participantData.department || "",
         totalScore: 0,
         scores: {},
-        level: 1,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        status: "active",
+        badges: [],
+        achievements: [],
+        joinedAt: serverTimestamp(),
+        lastActive: serverTimestamp(),
+        isActive: true,
       };
 
-      const docRef = await addDoc(collection(db, this.collection), participant);
+      // Use setDoc with the specific ID instead of addDoc
+      await setDoc(doc(db, this.collection, participantId), participant);
 
-      // Don't add to session.participants array - we use sessionParticipants collection instead
-      console.log("Participant created:", docRef.id);
-
-      return { id: docRef.id, ...participant };
+      console.log("Participant created:", participantId);
+      return { id: participantId, ...participant };
     } catch (error) {
       console.error("Error creating participant:", error);
       throw new Error("Failed to create participant");
     }
   }
 
-  // Get all participants for a session
+  // Get all participants for a session from sessionParticipants
   async getSessionParticipants(sessionId) {
     try {
       const q = query(
         collection(db, this.collection),
         where("sessionId", "==", sessionId),
-        where("status", "==", "active"),
-        orderBy("createdAt", "desc")
+        where("isActive", "==", true),
+        orderBy("totalScore", "desc")
       );
 
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
     } catch (error) {
       console.error("Error fetching participants:", error);
       throw new Error("Failed to fetch participants");
@@ -74,7 +87,7 @@ export class ParticipantService {
       const q = query(
         collection(db, this.collection),
         where("sessionId", "==", sessionId),
-        where("status", "==", "active"),
+        where("isActive", "==", true),
         orderBy("totalScore", "desc")
       );
 
@@ -95,7 +108,10 @@ export class ParticipantService {
   async updateParticipant(participantId, updateData) {
     try {
       const participantRef = doc(db, this.collection, participantId);
-      const updatedData = { ...updateData, updatedAt: serverTimestamp() };
+      const updatedData = {
+        ...updateData,
+        lastActive: serverTimestamp(),
+      };
 
       await updateDoc(participantRef, updatedData);
       return { id: participantId, ...updatedData };
@@ -110,9 +126,8 @@ export class ParticipantService {
     try {
       const participantRef = doc(db, this.collection, participantId);
       await updateDoc(participantRef, {
-        status: "inactive",
-        deletedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        isActive: false,
+        lastActive: serverTimestamp(),
       });
       return true;
     } catch (error) {
@@ -150,22 +165,22 @@ export class ParticipantService {
       await updateDoc(participantRef, {
         scores: newScores,
         totalScore: newTotalScore,
-        level: Math.floor(newTotalScore / 10) + 1,
-        updatedAt: serverTimestamp(),
+        lastActive: serverTimestamp(),
       });
 
       // Log activity
       await this.createActivity({
         sessionId: participantData.sessionId,
         participantId,
-        type: "score_awarded",
+        userId: participantData.userId,
+        type: "score_change",
         description: `${
           changeAmount > 0 ? "+" : ""
         }${changeAmount} points in ${category}`,
         points: changeAmount,
         category,
         reason,
-        awardedBy: trainerId,
+        changedBy: trainerId,
         timestamp: serverTimestamp(),
       });
 
@@ -185,7 +200,8 @@ export class ParticipantService {
   // Create activity entry
   async createActivity(activityData) {
     try {
-      await addDoc(collection(db, this.activitiesCollection), activityData);
+      const activitiesRef = collection(db, this.activitiesCollection);
+      await setDoc(doc(activitiesRef), activityData);
     } catch (error) {
       console.error("Error creating activity:", error);
     }
@@ -215,16 +231,26 @@ export class ParticipantService {
 
     for (const participantData of participantsList) {
       try {
-        // Check for duplicates by email
-        const existingQuery = query(
-          collection(db, this.collection),
-          where("email", "==", participantData.email),
-          where("sessionId", "==", sessionId)
+        // Check for duplicates by userId
+        if (!participantData.userId) {
+          results.failed.push({
+            data: participantData,
+            error: "Missing userId",
+          });
+          continue;
+        }
+
+        const participantId = getSessionParticipantId(
+          sessionId,
+          participantData.userId
         );
 
-        const existingDocs = await getDocs(existingQuery);
+        // Check if already exists
+        const existingDoc = await getDoc(
+          doc(db, this.collection, participantId)
+        );
 
-        if (!existingDocs.empty) {
+        if (existingDoc.exists()) {
           results.duplicates.push({
             email: participantData.email,
             name: participantData.name,
@@ -234,11 +260,15 @@ export class ParticipantService {
 
         const newParticipant = await this.createParticipant(
           participantData,
-          sessionId
+          sessionId,
+          participantData.userId
         );
         results.successful.push(newParticipant);
       } catch (error) {
-        results.failed.push({ data: participantData, error: error.message });
+        results.failed.push({
+          data: participantData,
+          error: error.message,
+        });
       }
     }
 
@@ -268,10 +298,9 @@ export class ParticipantService {
 
       return participants.filter(
         (p) =>
-          p.name.toLowerCase().includes(searchLower) ||
-          p.email.toLowerCase().includes(searchLower) ||
-          (p.department && p.department.toLowerCase().includes(searchLower)) ||
-          (p.phone && p.phone.includes(searchTerm))
+          p.name?.toLowerCase().includes(searchLower) ||
+          p.email?.toLowerCase().includes(searchLower) ||
+          (p.department && p.department.toLowerCase().includes(searchLower))
       );
     } catch (error) {
       console.error("Error searching participants:", error);

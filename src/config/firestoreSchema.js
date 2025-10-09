@@ -31,6 +31,16 @@ export const sessionStatus = {
 };
 
 /**
+ * Participant Status (for connection tracking)
+ */
+export const participantStatus = {
+  ACTIVE: "active", // Currently active in session
+  IDLE: "idle", // Inactive for 5+ minutes
+  DISCONNECTED: "disconnected", // Not seen for 15+ minutes
+  OFFLINE: "offline", // Manually set offline
+};
+
+/**
  * Get the session participant document ID
  * Format: {sessionId}_{userId}
  * This creates a unique, predictable ID for each user-session relationship
@@ -82,6 +92,7 @@ export const schemas = {
     cohort: sessionData.cohort || "",
     startDate: sessionData.startDate || null,
     endDate: sessionData.endDate || null,
+    location: sessionData.location || "",
     createdBy: creatorId,
     sessionAdmins: [creatorId], // Array of user IDs who can manage this session
     organizationId: sessionData.organizationId || null,
@@ -92,6 +103,9 @@ export const schemas = {
     registrationOpen: sessionData.registrationOpen !== false,
     scoringCategories: sessionData.scoringCategories || {},
     scoringScale: sessionData.scoringScale || { min: -50, max: 50 },
+    // Team settings
+    teamsEnabled: sessionData.teamsEnabled || false,
+    teams: sessionData.teams || [], // Array of team names
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -109,16 +123,21 @@ export const schemas = {
     // Additional participant data
     name: "",
     email: "",
+    phone: "",
     department: "",
+    team: "", // Team assignment (e.g., "Team A", "Team B")
+    connectionStatus: participantStatus.ACTIVE, // active, idle, disconnected, offline
     badges: [],
     achievements: [],
+    // Guest participant flag
+    isGuest: false, // true if participant doesn't have a user account yet
   }),
 
   // Activity/Score Change Log Schema
   activity: (activityData) => ({
     sessionId: activityData.sessionId,
     participantId: activityData.participantId,
-    userId: activityData.userId,
+    userId: activityData.userId || null, // Can be null for guest participants
     category: activityData.category,
     points: activityData.points,
     changedBy: activityData.changedBy, // User ID who made the change
@@ -141,6 +160,10 @@ export const validators = {
     return Object.values(sessionStatus).includes(status);
   },
 
+  isValidParticipantStatus: (status) => {
+    return Object.values(participantStatus).includes(status);
+  },
+
   isValidEmail: (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
@@ -148,6 +171,10 @@ export const validators = {
 
   isValidJoinCode: (code) => {
     return typeof code === "string" && code.length >= 6 && code.length <= 12;
+  },
+
+  isValidTeamName: (teamName) => {
+    return typeof teamName === "string" && teamName.trim().length > 0;
   },
 };
 
@@ -180,6 +207,17 @@ export const queryHelpers = {
     collection: collections.SESSION_PARTICIPANTS,
     where: [
       ["sessionId", "==", sessionId],
+      ["isActive", "==", true],
+    ],
+    orderBy: ["totalScore", "desc"],
+  }),
+
+  // Get participants by team
+  getTeamParticipants: (sessionId, teamName) => ({
+    collection: collections.SESSION_PARTICIPANTS,
+    where: [
+      ["sessionId", "==", sessionId],
+      ["team", "==", teamName],
       ["isActive", "==", true],
     ],
     orderBy: ["totalScore", "desc"],
@@ -246,14 +284,23 @@ export const defaultScoringCategories = {
   },
 };
 
+/**
+ * Helper function to generate guest user ID
+ */
+export const generateGuestUserId = () => {
+  return `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
 export default {
   collections,
   roles,
   sessionStatus,
+  participantStatus,
   getSessionParticipantId,
   parseSessionParticipantId,
   schemas,
   validators,
   queryHelpers,
   defaultScoringCategories,
+  generateGuestUserId,
 };

@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   setDoc,
+  addDoc,
   updateDoc,
   getDocs,
   getDoc,
@@ -197,13 +198,17 @@ export class ParticipantService {
     }
   }
 
-  // Create activity entry
+  // Create activity entry - FIXED
   async createActivity(activityData) {
     try {
       const activitiesRef = collection(db, this.activitiesCollection);
-      await setDoc(doc(activitiesRef), activityData);
+      // Use addDoc instead of setDoc(doc()) to auto-generate ID
+      const docRef = await addDoc(activitiesRef, activityData);
+      console.log("Activity created with ID:", docRef.id);
+      return docRef.id;
     } catch (error) {
       console.error("Error creating activity:", error);
+      throw error; // Re-throw to handle upstream
     }
   }
 
@@ -222,6 +227,47 @@ export class ParticipantService {
     } catch (error) {
       console.error("Error fetching activities:", error);
       throw new Error("Failed to fetch activities");
+    }
+  }
+
+  // Get session activities for dashboard
+  async getSessionActivities(sessionId, max = 50) {
+    try {
+      const q = query(
+        collection(db, this.activitiesCollection),
+        where("sessionId", "==", sessionId),
+        orderBy("timestamp", "desc"),
+        limit(max)
+      );
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error("Error fetching session activities:", error);
+      throw new Error("Failed to fetch session activities");
+    }
+  }
+
+  // Real-time listener for session activities
+  subscribeToSessionActivities(sessionId, callback, max = 50) {
+    try {
+      const q = query(
+        collection(db, this.activitiesCollection),
+        where("sessionId", "==", sessionId),
+        orderBy("timestamp", "desc"),
+        limit(max)
+      );
+
+      return onSnapshot(q, (querySnapshot) => {
+        const activities = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        callback(activities);
+      });
+    } catch (error) {
+      console.error("Error setting up activities listener:", error);
+      throw new Error("Failed to set up activities listener");
     }
   }
 

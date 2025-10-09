@@ -1,4 +1,4 @@
-// src/components/AddParticipantModal.jsx - Fixed version
+// src/components/AddParticipantModal.jsx - FIXED bulk upload
 import React, { useState, useRef } from "react";
 import {
   X,
@@ -20,7 +20,7 @@ import { ParticipantService } from "../services/participantService";
 const AddParticipantModal = ({
   isOpen,
   onClose,
-  sessionId, // Changed from trainingId to sessionId
+  sessionId,
   onParticipantAdded,
 }) => {
   const [activeTab, setActiveTab] = useState("single");
@@ -34,6 +34,7 @@ const AddParticipantModal = ({
     email: "",
     phone: "",
     department: "",
+    team: "",
   });
 
   // Bulk upload
@@ -46,7 +47,7 @@ const AddParticipantModal = ({
   const participantService = new ParticipantService();
 
   const resetForm = () => {
-    setFormData({ name: "", email: "", phone: "", department: "" });
+    setFormData({ name: "", email: "", phone: "", department: "", team: "" });
     setCsvFile(null);
     setCsvData([]);
     setBulkResults(null);
@@ -63,8 +64,8 @@ const AddParticipantModal = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.email.trim()) {
-      setError("Name and email are required");
+    if (!formData.name.trim()) {
+      setError("Name is required");
       return;
     }
 
@@ -79,9 +80,10 @@ const AddParticipantModal = ({
 
       const participantData = {
         name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
+        email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
         department: formData.department.trim() || null,
+        team: formData.team.trim() || null,
       };
 
       console.log("Creating participant for session:", sessionId);
@@ -97,7 +99,6 @@ const AddParticipantModal = ({
         onParticipantAdded(newParticipant);
       }
 
-      // Reset form after success
       setTimeout(() => {
         resetForm();
         handleClose();
@@ -147,48 +148,93 @@ const AddParticipantModal = ({
     reader.onload = (e) => {
       try {
         const csv = e.target.result;
-        const lines = csv.split("\n");
-        const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+        const lines = csv.split(/\r?\n/).filter((line) => line.trim());
 
-        // Validate required headers
-        const requiredHeaders = ["name", "email"];
-        const missingHeaders = requiredHeaders.filter(
-          (h) => !headers.includes(h)
+        if (lines.length === 0) {
+          setError("CSV file is empty");
+          return;
+        }
+
+        // Parse headers - handle quotes and trim
+        const headers = lines[0].split(",").map((h) =>
+          h
+            .trim()
+            .replace(/^["']|["']$/g, "")
+            .toLowerCase()
         );
 
-        if (missingHeaders.length > 0) {
-          setError(`Missing required columns: ${missingHeaders.join(", ")}`);
+        console.log("CSV Headers:", headers);
+
+        // Validate required headers
+        if (!headers.includes("name")) {
+          setError("CSV must have a 'name' column");
           return;
         }
 
         const participants = [];
+
+        // Parse each line
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
 
-          const values = line.split(",").map((v) => v.trim());
-          const participant = {};
+          // Parse CSV line handling quotes
+          const values = [];
+          let currentValue = "";
+          let insideQuotes = false;
 
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+
+            if (char === '"' || char === "'") {
+              insideQuotes = !insideQuotes;
+            } else if (char === "," && !insideQuotes) {
+              values.push(currentValue.trim());
+              currentValue = "";
+            } else {
+              currentValue += char;
+            }
+          }
+          values.push(currentValue.trim()); // Push last value
+
+          // Map values to headers
+          const participant = {};
           headers.forEach((header, index) => {
-            participant[header] = values[index] || "";
+            const value = values[index] || "";
+            participant[header] = value.replace(/^["']|["']$/g, "");
           });
 
-          // Validate required fields
-          if (participant.name && participant.email) {
+          // Only include if name exists
+          if (participant.name && participant.name.trim()) {
             participants.push({
-              name: participant.name,
-              email: participant.email.toLowerCase(),
-              phone: participant.phone || null,
-              department: participant.department || null,
+              name: participant.name.trim(),
+              email: participant.email?.trim() || null,
+              phone: participant.phone?.trim() || null,
+              department: participant.department?.trim() || null,
+              team: participant.team?.trim() || null,
             });
           }
+        }
+
+        console.log("Parsed participants:", participants);
+
+        if (participants.length === 0) {
+          setError(
+            "No valid participants found in CSV. Make sure at least the 'name' field is filled."
+          );
+          return;
         }
 
         setCsvData(participants);
         setError("");
       } catch (err) {
+        console.error("CSV parsing error:", err);
         setError("Failed to parse CSV file. Please check the format.");
       }
+    };
+
+    reader.onerror = () => {
+      setError("Failed to read file");
     };
 
     reader.readAsText(file);
@@ -216,6 +262,7 @@ const AddParticipantModal = ({
         "participants to session:",
         sessionId
       );
+
       const results = await participantService.bulkCreateParticipants(
         csvData,
         sessionId
@@ -228,12 +275,17 @@ const AddParticipantModal = ({
         setSuccess(
           `Successfully added ${results.successful.length} participants`
         );
-        // Notify parent of new participants
         results.successful.forEach((participant) => {
           if (onParticipantAdded) {
             onParticipantAdded(participant);
           }
         });
+      }
+
+      if (results.failed.length > 0) {
+        setError(
+          `${results.failed.length} participants failed to upload. See details below.`
+        );
       }
     } catch (err) {
       console.error("Error bulk uploading:", err);
@@ -246,7 +298,12 @@ const AddParticipantModal = ({
   // Download CSV template
   const downloadTemplate = () => {
     const csvContent =
-      "name,email,phone,department\nJohn Doe,john@example.com,+1-555-0123,Engineering\nJane Smith,jane@example.com,+1-555-0124,Marketing";
+      "name,email,phone,department,team\n" +
+      "John Doe,john@example.com,+234 803 567 1711,Engineering,Team A\n" +
+      "Jane Smith,jane@example.com,+234 815 982 0079,Marketing,Team B\n" +
+      "Bob Johnson,,+233 24 688 0913,Sales,Team A\n" +
+      "Alice Williams,alice@example.com,,,Team C";
+
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -331,13 +388,12 @@ const AddParticipantModal = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address *
+                  Email Address
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                   <input
                     type="email"
-                    required
                     value={formData.email}
                     onChange={(e) =>
                       setFormData((prev) => ({
@@ -346,7 +402,7 @@ const AddParticipantModal = ({
                       }))
                     }
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter email address"
+                    placeholder="Enter email address (optional)"
                   />
                 </div>
               </div>
@@ -367,7 +423,7 @@ const AddParticipantModal = ({
                       }))
                     }
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter phone number"
+                    placeholder="Enter phone number (optional)"
                   />
                 </div>
               </div>
@@ -388,9 +444,30 @@ const AddParticipantModal = ({
                       }))
                     }
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter department or role"
+                    placeholder="Enter department or role (optional)"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Team
+                </label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={formData.team}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, team: e.target.value }))
+                    }
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter team name (optional)"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  e.g., Team A, Team B, Red Team, etc.
+                </p>
               </div>
             </form>
           )}
@@ -398,25 +475,43 @@ const AddParticipantModal = ({
           {/* Bulk Upload Tab */}
           {activeTab === "bulk" && (
             <div className="space-y-6">
-              {/* Download Template */}
+              {/* Instructions */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-medium text-blue-900 mb-1">
-                      CSV Template
-                    </h4>
-                    <p className="text-sm text-blue-700">
-                      Download our template to ensure proper formatting
-                    </p>
-                  </div>
-                  <button
-                    onClick={downloadTemplate}
-                    className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span>Download</span>
-                  </button>
+                <h4 className="font-medium text-blue-900 mb-2">
+                  CSV Format Requirements
+                </h4>
+                <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+                  <li>
+                    <strong>Required:</strong> name column
+                  </li>
+                  <li>
+                    <strong>Optional:</strong> email, phone, department, team
+                    columns
+                  </li>
+                  <li>
+                    Teams will be automatically created from the team column
+                  </li>
+                  <li>Empty fields are allowed (except name)</li>
+                </ul>
+              </div>
+
+              {/* Download Template */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div>
+                  <h4 className="font-medium text-gray-900">
+                    Download Template
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    Use our template for proper formatting
+                  </p>
                 </div>
+                <button
+                  onClick={downloadTemplate}
+                  className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Download</span>
+                </button>
               </div>
 
               {/* File Upload Area */}
@@ -450,7 +545,7 @@ const AddParticipantModal = ({
                       {csvFile.name}
                     </h4>
                     <p className="text-sm text-gray-600">
-                      {csvData.length} participants found
+                      {csvData.length} participants ready to upload
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -501,6 +596,9 @@ const AddParticipantModal = ({
                             <th className="text-left py-2 px-3 font-medium text-gray-900">
                               Department
                             </th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-900">
+                              Team
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -513,13 +611,16 @@ const AddParticipantModal = ({
                                 {participant.name}
                               </td>
                               <td className="py-2 px-3 text-gray-600">
-                                {participant.email}
+                                {participant.email || "-"}
                               </td>
                               <td className="py-2 px-3 text-gray-600">
                                 {participant.phone || "-"}
                               </td>
                               <td className="py-2 px-3 text-gray-600">
                                 {participant.department || "-"}
+                              </td>
+                              <td className="py-2 px-3 text-gray-600">
+                                {participant.team || "-"}
                               </td>
                             </tr>
                           ))}
@@ -560,9 +661,11 @@ const AddParticipantModal = ({
                           {bulkResults.duplicates.length} duplicates skipped
                         </span>
                       </div>
-                      <div className="text-sm text-yellow-800">
+                      <div className="text-sm text-yellow-800 mt-2">
                         {bulkResults.duplicates.slice(0, 3).map((dup, i) => (
-                          <div key={i}>{dup.email}</div>
+                          <div key={i}>
+                            {dup.name} ({dup.email || "no email"})
+                          </div>
                         ))}
                         {bulkResults.duplicates.length > 3 && (
                           <div>
@@ -581,10 +684,10 @@ const AddParticipantModal = ({
                           {bulkResults.failed.length} participants failed to add
                         </span>
                       </div>
-                      <div className="text-sm text-red-800">
+                      <div className="text-sm text-red-800 mt-2">
                         {bulkResults.failed.slice(0, 3).map((fail, i) => (
                           <div key={i}>
-                            {fail.data.email}: {fail.error}
+                            {fail.data.name}: {fail.error}
                           </div>
                         ))}
                         {bulkResults.failed.length > 3 && (
@@ -630,9 +733,7 @@ const AddParticipantModal = ({
             {activeTab === "single" ? (
               <button
                 onClick={handleSubmit}
-                disabled={
-                  loading || !formData.name.trim() || !formData.email.trim()
-                }
+                disabled={loading || !formData.name.trim()}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
               >
                 {loading ? (

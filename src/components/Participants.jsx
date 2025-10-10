@@ -1,4 +1,4 @@
-// src/components/Participants.jsx - Enhanced with teams and status
+// src/components/Participants.jsx - Enhanced with edit modal, create team, and winning team card
 import React, { useState, useEffect } from "react";
 import {
   User,
@@ -13,10 +13,14 @@ import {
   WifiOff,
   Circle,
   Shield,
+  Trophy,
+  UsersRound,
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
 import AddParticipantModal from "./AddParticipantModal";
+import EditParticipantModal from "./EditParticipantModal";
+import CreateTeamModal from "./CreateTeamModal";
 
 const Participants = ({ calculateLevel }) => {
   const { currentSession } = useSession();
@@ -28,6 +32,9 @@ const Participants = ({ calculateLevel }) => {
   const [sortBy, setSortBy] = useState("score");
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const participantService = new ParticipantService();
@@ -54,6 +61,20 @@ const Participants = ({ calculateLevel }) => {
     ...new Set(participants.map((p) => p.department).filter(Boolean)),
   ];
   const teams = [...new Set(participants.map((p) => p.team).filter(Boolean))];
+
+  // Calculate team scores
+  const teamScores = teams.map((teamName) => {
+    const teamMembers = participants.filter((p) => p.team === teamName);
+    const totalScore = teamMembers.reduce((sum, p) => sum + (p.totalScore || 0), 0);
+    return {
+      name: teamName,
+      totalScore,
+      memberCount: teamMembers.length,
+      avgScore: teamMembers.length > 0 ? Math.round(totalScore / teamMembers.length) : 0,
+    };
+  });
+
+  const winningTeam = teamScores.sort((a, b) => b.totalScore - a.totalScore)[0];
 
   // Connection status badge
   const ConnectionStatusBadge = ({ status }) => {
@@ -98,6 +119,12 @@ const Participants = ({ calculateLevel }) => {
         <span>{config.label}</span>
       </div>
     );
+  };
+
+  // Handle participant name click
+  const handleParticipantClick = (participant) => {
+    setSelectedParticipant(participant);
+    setShowEditModal(true);
   };
 
   // Filter and sort participants
@@ -174,9 +201,12 @@ const Participants = ({ calculateLevel }) => {
           {/* Participant Info */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2 mb-1">
-              <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors text-sm md:text-base truncate">
+              <button
+                onClick={() => handleParticipantClick(participant)}
+                className="font-bold text-gray-900 hover:text-blue-600 transition-colors text-sm md:text-base truncate text-left underline decoration-dotted decoration-blue-400 hover:decoration-solid"
+              >
                 {participant.name}
-              </h3>
+              </button>
               {rank <= 3 && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-100 text-amber-800 w-fit">
                   Top {rank}
@@ -243,6 +273,7 @@ const Participants = ({ calculateLevel }) => {
       amber: "from-amber-500 to-amber-600",
       indigo: "from-indigo-500 to-indigo-600",
       green: "from-green-500 to-green-600",
+      purple: "from-purple-500 to-purple-600",
     };
 
     return (
@@ -295,13 +326,22 @@ const Participants = ({ calculateLevel }) => {
                 Manage training participants and track their progress
               </p>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 md:px-6 py-2 md:py-3 rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl hover:scale-105 text-sm md:text-base"
-            >
-              <UserPlus className="h-4 w-4 md:h-5 md:w-5" />
-              <span>Add Participant</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <button
+                onClick={() => setShowCreateTeamModal(true)}
+                className="inline-flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 md:px-6 py-2 md:py-3 rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl hover:scale-105 text-sm md:text-base"
+              >
+                <UsersRound className="h-4 w-4 md:h-5 md:w-5" />
+                <span>Create Team</span>
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 md:px-6 py-2 md:py-3 rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl hover:scale-105 text-sm md:text-base"
+              >
+                <UserPlus className="h-4 w-4 md:h-5 md:w-5" />
+                <span>Add Participant</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -492,7 +532,7 @@ const Participants = ({ calculateLevel }) => {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
         <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 text-center group hover:shadow-lg transition-all duration-300">
           <div className="w-12 h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl mx-auto mb-4 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
             <TrendingUp className="h-6 w-6 text-white" />
@@ -548,16 +588,60 @@ const Participants = ({ calculateLevel }) => {
             points
           </p>
         </div>
+
+        {/* Winning Team Card */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 text-center group hover:shadow-lg transition-all duration-300">
+          <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl mx-auto mb-4 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+            <Trophy className="h-6 w-6 text-white" />
+          </div>
+          <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">
+            Winning Team
+          </h3>
+          {winningTeam ? (
+            <>
+              <p className="text-base md:text-lg font-bold text-purple-600 mb-1 truncate">
+                {winningTeam.name}
+              </p>
+              <p className="text-xs md:text-sm text-gray-600">
+                {winningTeam.totalScore} points • {winningTeam.memberCount}{" "}
+                members
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">No teams yet</p>
+          )}
+        </div>
       </div>
 
-      {/* Add Participant Modal */}
+      {/* Modals */}
       <AddParticipantModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         sessionId={currentSession?.id}
         onParticipantAdded={() => {}}
       />
-    </div>
+
+      <EditParticipantModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedParticipant(null);
+        }}
+        participant={selectedParticipant}
+        teams={teams}
+        onParticipantUpdated={() => {}}
+      />
+
+      <CreateTeamModal
+        isOpen={showCreateTeamModal}
+        onClose={() => setShowCreateTeamModal(false)}
+  sessionId={currentSession?.id}
+  participants={participants}
+  onTeamCreated={() => {
+    participantService.subscribeToSessionParticipants(currentSession.id, setParticipants);
+  }}
+      />
+</div>
   );
 };
 

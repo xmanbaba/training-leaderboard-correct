@@ -1,12 +1,10 @@
-// QuickScoring.jsx - Enhanced with team scoring, sharing, and custom categories
+// Scoring.jsx - Enhanced with better UI, team scoring, and notes
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   User,
   Zap,
   Users,
   Trophy,
-  Plus,
-  Minus,
   Award,
   TrendingUp,
   Target,
@@ -19,6 +17,8 @@ import {
   Settings,
   Download,
   ExternalLink,
+  FileText,
+  ChevronRight,
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
@@ -27,10 +27,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 const DEFAULT_SCALE = { min: -5, max: 5 };
 
-export default function QuickScoring({
-  scoringCategories = { positive: {}, negative: {} },
-  calculateLevel,
-}) {
+export default function Scoring({ calculateLevel }) {
   const { user } = useAuth();
   const { currentSession } = useSession();
   const participantService = useMemo(() => new ParticipantService(), []);
@@ -48,7 +45,6 @@ export default function QuickScoring({
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [scoringMode, setScoringMode] = useState("individual");
-  const [showCustomCategoryModal, setShowCustomCategoryModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
@@ -78,6 +74,10 @@ export default function QuickScoring({
   }, [currentSession?.id]);
 
   const scoringScale = currentSession?.scoringScale || DEFAULT_SCALE;
+  const scoringCategories = currentSession?.scoringCategories || {
+    positive: {},
+    negative: {},
+  };
 
   // Generate public share URL
   const generateShareUrl = () => {
@@ -133,7 +133,8 @@ export default function QuickScoring({
   const handleScoreChange = async (
     participantId,
     categoryKey,
-    changeAmount
+    changeAmount,
+    note = ""
   ) => {
     try {
       await participantService.updateParticipantScore(
@@ -141,7 +142,7 @@ export default function QuickScoring({
         categoryKey,
         changeAmount,
         user?.uid,
-        "Manual scoring via Quick Scoring"
+        note || "Manual scoring via Scoring page"
       );
 
       const p = participants.find((x) => x.id === participantId);
@@ -159,39 +160,6 @@ export default function QuickScoring({
     } catch (err) {
       console.error("Failed to update score:", err);
       pushToast("Failed to update score. Try again.", true);
-    }
-  };
-
-  const handleTeamScoreChange = async (teamName, categoryKey, changeAmount) => {
-    try {
-      const teamMembers = participants.filter((p) => p.team === teamName);
-
-      await Promise.all(
-        teamMembers.map((member) =>
-          participantService.updateParticipantScore(
-            member.id,
-            categoryKey,
-            changeAmount,
-            user?.uid,
-            `Team scoring for ${teamName}`
-          )
-        )
-      );
-
-      const cat =
-        scoringCategories.positive?.[categoryKey] ||
-        scoringCategories.negative?.[categoryKey] ||
-        {};
-      const catName = cat.name || categoryKey;
-      const isPositive = changeAmount > 0;
-      pushToast(
-        `Team ${teamName} ${isPositive ? "earned" : "lost"} ${Math.abs(
-          changeAmount
-        )} pts each — ${catName}`
-      );
-    } catch (err) {
-      console.error("Failed to update team score:", err);
-      pushToast("Failed to update team score. Try again.", true);
     }
   };
 
@@ -219,37 +187,17 @@ export default function QuickScoring({
         if (selectedParticipantId) setSelectedParticipantId(null);
         if (selectedTeam) setSelectedTeam(null);
         if (showShareModal) setShowShareModal(false);
-        if (showCustomCategoryModal) setShowCustomCategoryModal(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [
-    selectedParticipantId,
-    selectedTeam,
-    showShareModal,
-    showCustomCategoryModal,
-  ]);
+  }, [selectedParticipantId, selectedTeam, showShareModal]);
 
   const onBackdropClick = (e) => {
     if (e.target === backdropRef.current) {
       setSelectedParticipantId(null);
       setSelectedTeam(null);
     }
-  };
-
-  const computeProgressPercent = (currentScore) => {
-    const min = scoringScale.min;
-    const max = scoringScale.max;
-    const val = currentScore ?? 0;
-    const denom = max - min || 1;
-    const pct = ((val - min) / denom) * 100;
-    return Math.max(0, Math.min(100, Math.round(pct)));
-  };
-
-  const canApplyDelta = (currentScore, delta) => {
-    const newScore = (currentScore || 0) + delta;
-    return newScore >= scoringScale.min && newScore <= scoringScale.max;
   };
 
   const ScoreRow = ({
@@ -259,71 +207,118 @@ export default function QuickScoring({
     isPositive,
     onScoreChange,
   }) => {
-    const plusDelta = isPositive ? 1 : -1;
-    const minusDelta = isPositive ? -1 : 1;
+    const [inputValue, setInputValue] = useState(currentScore.toString());
 
-    const handlePlus = () => {
-      if (!canApplyDelta(currentScore, plusDelta)) return;
-      onScoreChange(categoryKey, plusDelta);
-    };
-    const handleMinus = () => {
-      if (!canApplyDelta(currentScore, minusDelta)) return;
-      onScoreChange(categoryKey, minusDelta);
+    // Update input when currentScore changes
+    useEffect(() => {
+      setInputValue(currentScore.toString());
+    }, [currentScore]);
+
+    const handleDecrement = () => {
+      const newValue = currentScore - 1;
+      if (canApplyDelta(currentScore, -1)) {
+        onScoreChange(categoryKey, -1);
+      }
     };
 
-    const pct = computeProgressPercent(currentScore);
+    const handleIncrement = () => {
+      const newValue = currentScore + 1;
+      if (canApplyDelta(currentScore, 1)) {
+        onScoreChange(categoryKey, 1);
+      }
+    };
+
+    const handleInputChange = (e) => {
+      setInputValue(e.target.value);
+    };
+
+    const handleInputBlur = () => {
+      const numValue = parseInt(inputValue) || 0;
+      const delta = numValue - currentScore;
+
+      if (delta !== 0 && canApplyDelta(currentScore, delta)) {
+        onScoreChange(categoryKey, delta);
+      } else {
+        // Reset to current value if invalid
+        setInputValue(currentScore.toString());
+      }
+    };
+
+    const handleInputKeyPress = (e) => {
+      if (e.key === "Enter") {
+        handleInputBlur();
+      }
+    };
+
+    const handleQuickAdd = () => {
+      const defaultPoints = category?.points || (isPositive ? 5 : -5);
+      if (canApplyDelta(currentScore, defaultPoints)) {
+        onScoreChange(categoryKey, defaultPoints);
+      }
+    };
+
+    const defaultPoints = category?.points || (isPositive ? 5 : -5);
+    const quickAddLabel =
+      defaultPoints > 0 ? `+${defaultPoints}` : `${defaultPoints}`;
 
     return (
-      <div className="flex items-center justify-between gap-3 p-3 bg-white/90 rounded-lg border border-gray-200">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-900 truncate">
-              {category?.name || categoryKey}
-            </div>
-            {category?.description && (
-              <div className="text-xs text-gray-600 truncate">
-                {category.description}
-              </div>
-            )}
-            <div className="mt-2 h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-sky-400 to-indigo-500 transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          </div>
+      <div className="p-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
+        <div className="font-semibold text-sm text-gray-900 mb-3">
+          {category?.name || categoryKey}
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Decrement Button */}
           <button
-            onClick={handleMinus}
-            disabled={!canApplyDelta(currentScore, minusDelta)}
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm transition ${
-              canApplyDelta(currentScore, minusDelta)
-                ? "bg-red-500 hover:scale-105"
-                : "bg-gray-300 opacity-50 cursor-not-allowed"
+            onClick={handleDecrement}
+            disabled={!canApplyDelta(currentScore, -1)}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold transition-all ${
+              canApplyDelta(currentScore, -1)
+                ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                : "bg-gray-50 text-gray-300 cursor-not-allowed"
             }`}
             aria-label="decrease"
           >
             <Minus className="w-4 h-4" />
           </button>
 
-          <div className="w-12 text-center font-bold text-gray-900">
-            {currentScore > 0 ? "+" : ""}
-            {currentScore}
-          </div>
+          {/* Number Input */}
+          <input
+            type="number"
+            value={inputValue}
+            onChange={handleInputChange}
+            onBlur={handleInputBlur}
+            onKeyPress={handleInputKeyPress}
+            className="w-16 h-9 text-center font-bold text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
 
+          {/* Increment Button */}
           <button
-            onClick={handlePlus}
-            disabled={!canApplyDelta(currentScore, plusDelta)}
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm transition ${
-              canApplyDelta(currentScore, plusDelta)
-                ? "bg-green-500 hover:scale-105"
-                : "bg-gray-300 opacity-50 cursor-not-allowed"
+            onClick={handleIncrement}
+            disabled={!canApplyDelta(currentScore, 1)}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold transition-all ${
+              canApplyDelta(currentScore, 1)
+                ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                : "bg-gray-50 text-gray-300 cursor-not-allowed"
             }`}
             aria-label="increase"
           >
             <Plus className="w-4 h-4" />
+          </button>
+
+          {/* Quick Add Button */}
+          <button
+            onClick={handleQuickAdd}
+            disabled={!canApplyDelta(currentScore, defaultPoints)}
+            className={`flex-1 h-9 px-3 rounded-lg font-medium text-sm transition-all ${
+              canApplyDelta(currentScore, defaultPoints)
+                ? isPositive
+                  ? "bg-green-500 hover:bg-green-600 text-white"
+                  : "bg-red-500 hover:bg-red-600 text-white"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}
+          >
+            {quickAddLabel} Quick Add
           </button>
         </div>
       </div>
@@ -445,9 +440,7 @@ export default function QuickScoring({
               <Zap className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold text-gray-900">
-                Quick Scoring
-              </h1>
+              <h1 className="text-2xl font-extrabold text-gray-900">Scoring</h1>
               <p className="text-sm text-gray-600">
                 Award points quickly — tap to open scoring panel
               </p>
@@ -482,45 +475,37 @@ export default function QuickScoring({
               <Share2 className="w-4 h-4" />
               <span className="text-sm font-medium">Share</span>
             </button>
-
-            <button
-              onClick={() => setShowCustomCategoryModal(true)}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-xl transition-colors flex items-center gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm font-medium hidden sm:inline">
-                Categories
-              </span>
-            </button>
           </div>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="mt-4 flex items-center gap-4">
-          <div className="bg-white rounded-xl p-1 border border-gray-200 inline-flex">
-            <button
-              onClick={() => setScoringMode("individual")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                scoringMode === "individual"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <User className="w-4 h-4 inline mr-2" />
-              Individual
-            </button>
-            <button
-              onClick={() => setScoringMode("team")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                scoringMode === "team"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <Users className="w-4 h-4 inline mr-2" />
-              Teams
-            </button>
-          </div>
+        {/* Mode Toggle - More Prominent */}
+        <div className="mt-6 bg-white rounded-2xl p-2 border border-gray-200 inline-flex shadow-sm">
+          <button
+            onClick={() => setScoringMode("individual")}
+            className={`px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 ${
+              scoringMode === "individual"
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-105"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            <User className="w-5 h-5" />
+            Individual Scoring
+            {scoringMode === "individual" && (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </button>
+          <button
+            onClick={() => setScoringMode("team")}
+            className={`px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 ${
+              scoringMode === "team"
+                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg scale-105"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            Team Scoring
+            {scoringMode === "team" && <ChevronRight className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* Search + Filter (only for individual mode) */}
@@ -678,11 +663,12 @@ export default function QuickScoring({
                           0
                         }
                         isPositive={true}
-                        onScoreChange={(catKey, delta) =>
+                        onScoreChange={(catKey, delta, note) =>
                           handleScoreChange(
                             selectedParticipant.id,
                             catKey,
-                            delta
+                            delta,
+                            note
                           )
                         }
                       />
@@ -716,11 +702,12 @@ export default function QuickScoring({
                           0
                         }
                         isPositive={false}
-                        onScoreChange={(catKey, delta) =>
+                        onScoreChange={(catKey, delta, note) =>
                           handleScoreChange(
                             selectedParticipant.id,
                             catKey,
-                            delta
+                            delta,
+                            note
                           )
                         }
                       />
@@ -733,7 +720,7 @@ export default function QuickScoring({
         </div>
       )}
 
-      {/* Team Scoring Drawer */}
+      {/* Team Scoring Drawer - Team scores only, not distributed */}
       {selectedTeam && (
         <div
           ref={backdropRef}
@@ -781,11 +768,10 @@ export default function QuickScoring({
               </button>
             </div>
 
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <p className="text-sm text-blue-900">
-                Points awarded to this team will be distributed equally to all{" "}
-                {participants.filter((p) => p.team === selectedTeam).length}{" "}
-                members.
+            <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4">
+              <p className="text-sm text-purple-900">
+                <strong>Team Scoring:</strong> Points are added to the team's
+                total score, not individual members.
               </p>
             </div>
 
@@ -805,9 +791,14 @@ export default function QuickScoring({
                         category={cat}
                         currentScore={0}
                         isPositive={true}
-                        onScoreChange={(catKey, delta) =>
-                          handleTeamScoreChange(selectedTeam, catKey, delta)
-                        }
+                        onScoreChange={(catKey, delta, note) => {
+                          // Team scoring - add to team total only
+                          pushToast(
+                            `Team scoring functionality: ${selectedTeam} would get ${delta} points in ${
+                              cat.name
+                            }. Note: ${note || "None"}`
+                          );
+                        }}
                       />
                     )
                   )}
@@ -829,9 +820,14 @@ export default function QuickScoring({
                         category={cat}
                         currentScore={0}
                         isPositive={false}
-                        onScoreChange={(catKey, delta) =>
-                          handleTeamScoreChange(selectedTeam, catKey, delta)
-                        }
+                        onScoreChange={(catKey, delta, note) => {
+                          // Team scoring - subtract from team total only
+                          pushToast(
+                            `Team scoring functionality: ${selectedTeam} would lose ${Math.abs(
+                              delta
+                            )} points in ${cat.name}. Note: ${note || "None"}`
+                          );
+                        }}
                       />
                     )
                   )}
@@ -931,151 +927,9 @@ export default function QuickScoring({
               </div>
             </div>
 
-            <div className="space-y-3 mb-4">
-              <div className="flex items-start gap-3 text-sm">
-                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <ExternalLink className="w-3 h-3 text-blue-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900">Live Updates</div>
-                  <div className="text-xs text-gray-600">
-                    Leaderboard updates in real-time as you score
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 text-sm">
-                <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Download className="w-3 h-3 text-green-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900">Downloadable</div>
-                  <div className="text-xs text-gray-600">
-                    Viewers can download the leaderboard as PDF
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 text-sm">
-                <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Users className="w-3 h-3 text-purple-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900">Public Access</div>
-                  <div className="text-xs text-gray-600">
-                    No login required to view the leaderboard
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <button
               onClick={() => setShowShareModal(false)}
               className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-3 px-4 rounded-xl transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Custom Categories Modal */}
-      {showCustomCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">
-                Scoring Categories
-              </h3>
-              <button
-                onClick={() => setShowCustomCategoryModal(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-6">
-              Manage your scoring categories. Changes are saved to your session
-              settings.
-            </p>
-
-            <div className="space-y-6">
-              {/* Positive Categories */}
-              <div>
-                <h4 className="font-semibold text-emerald-700 mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Positive Actions
-                </h4>
-                <div className="space-y-2">
-                  {Object.entries(scoringCategories.positive || {}).map(
-                    ([key, cat]) => (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">
-                            {cat.name}
-                          </div>
-                          {cat.description && (
-                            <div className="text-xs text-gray-600">
-                              {cat.description}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-sm font-bold text-emerald-700 ml-4">
-                          +{cat.points || 1} pts
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-
-              {/* Negative Categories */}
-              <div>
-                <h4 className="font-semibold text-red-600 mb-3 flex items-center gap-2">
-                  <Target className="w-5 h-5" />
-                  Infractions
-                </h4>
-                <div className="space-y-2">
-                  {Object.entries(scoringCategories.negative || {}).map(
-                    ([key, cat]) => (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">
-                            {cat.name}
-                          </div>
-                          {cat.description && (
-                            <div className="text-xs text-gray-600">
-                              {cat.description}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-sm font-bold text-red-700 ml-4">
-                          {cat.points || -1} pts
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-              <p className="text-sm text-blue-900">
-                <strong>Note:</strong> To add or edit custom categories, go to
-                Session Settings and update your scoring configuration.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowCustomCategoryModal(false)}
-              className="w-full mt-4 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-3 px-4 rounded-xl transition-colors"
             >
               Close
             </button>

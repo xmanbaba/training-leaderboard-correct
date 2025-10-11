@@ -1,3 +1,4 @@
+// src/components/Settings.jsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   Settings as SettingsIcon,
@@ -5,7 +6,6 @@ import {
   Share2,
   Save,
   X,
-  Calendar,
   Trophy,
   Sliders,
   Copy,
@@ -14,13 +14,11 @@ import {
   Edit2,
   Trash2,
   Download,
-  Archive,
   Shield,
   Mail,
   UserPlus,
   FileText,
   Upload,
-  AlertCircle,
   Target,
   Zap,
   Loader,
@@ -51,6 +49,7 @@ const Settings = () => {
     registrationOpen: true,
     allowNegativeScores: true,
     allowDecimalScores: false,
+    isArchived: false,
   });
 
   const [categories, setCategories] = useState({
@@ -68,16 +67,110 @@ const Settings = () => {
     description: "",
   });
 
-  const [newAdmin, setNewAdmin] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
   const [csvFile, setCsvFile] = useState(null);
   const [csvData, setCsvData] = useState([]);
   const [bulkResults, setBulkResults] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadingBulk, setUploadingBulk] = useState(false);
 
-  // Load session data
+  // Pre-defined category templates
+  const categoryTemplates = {
+    positive: [
+      {
+        key: "participation",
+        name: "Active Participation",
+        icon: "MessageSquare",
+        points: 5,
+        description: "Actively engaged in discussions",
+      },
+      {
+        key: "punctuality",
+        name: "Punctuality",
+        icon: "Clock",
+        points: 3,
+        description: "Arrived on time",
+      },
+      {
+        key: "helpfulness",
+        name: "Helping Others",
+        icon: "Users",
+        points: 4,
+        description: "Helped fellow participants",
+      },
+      {
+        key: "excellence",
+        name: "Excellence",
+        icon: "Star",
+        points: 10,
+        description: "Outstanding performance",
+      },
+      {
+        key: "leadership",
+        name: "Leadership",
+        icon: "Crown",
+        points: 8,
+        description: "Demonstrated leadership",
+      },
+      {
+        key: "creativity",
+        name: "Creativity",
+        icon: "Lightbulb",
+        points: 7,
+        description: "Creative thinking",
+      },
+      {
+        key: "teamwork",
+        name: "Teamwork",
+        icon: "Users",
+        points: 6,
+        description: "Great team collaboration",
+      },
+    ],
+    negative: [
+      {
+        key: "disruption",
+        name: "Disruption",
+        icon: "AlertTriangle",
+        points: -5,
+        description: "Disruptive behavior",
+      },
+      {
+        key: "lateness",
+        name: "Late Arrival",
+        icon: "Clock",
+        points: -2,
+        description: "Arrived late",
+      },
+      {
+        key: "absence",
+        name: "Unexcused Absence",
+        icon: "X",
+        points: -10,
+        description: "Absent without notice",
+      },
+      {
+        key: "unprepared",
+        name: "Unprepared",
+        icon: "BookOpen",
+        points: -3,
+        description: "Came unprepared",
+      },
+      {
+        key: "negativity",
+        name: "Negative Attitude",
+        icon: "Frown",
+        points: -4,
+        description: "Negative behavior",
+      },
+    ],
+  };
+
+  // Load session data - FIXED: Only update when session ID changes
+  const sessionIdRef = useRef(null);
   useEffect(() => {
-    if (currentSession) {
+    if (currentSession && currentSession.id !== sessionIdRef.current) {
+      sessionIdRef.current = currentSession.id;
       setFormData({
         trainingName: currentSession.name || "",
         cohort: currentSession.cohort || "",
@@ -88,12 +181,14 @@ const Settings = () => {
         registrationOpen: currentSession.registrationOpen ?? true,
         allowNegativeScores: currentSession.allowNegativeScores ?? true,
         allowDecimalScores: currentSession.allowDecimalScores ?? false,
+        isArchived: currentSession.status === "completed",
       });
       setCategories(
         currentSession.scoringCategories || { positive: {}, negative: {} }
       );
+      setHasChanges(false);
     }
-  }, [currentSession]);
+  }, [currentSession?.id]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -118,6 +213,7 @@ const Settings = () => {
         allowNegativeScores: formData.allowNegativeScores,
         allowDecimalScores: formData.allowDecimalScores,
         scoringCategories: categories,
+        status: formData.isArchived ? "completed" : "active",
       });
 
       await refreshCurrentSession();
@@ -142,6 +238,7 @@ const Settings = () => {
         registrationOpen: currentSession.registrationOpen ?? true,
         allowNegativeScores: currentSession.allowNegativeScores ?? true,
         allowDecimalScores: currentSession.allowDecimalScores ?? false,
+        isArchived: currentSession.status === "completed",
       });
       setCategories(
         currentSession.scoringCategories || { positive: {}, negative: {} }
@@ -194,6 +291,28 @@ const Settings = () => {
       description: "",
     });
     setActiveModal(null);
+    setHasChanges(true);
+  };
+
+  const handleAddTemplateCategory = (template, type) => {
+    const key = template.key;
+    if (categories[type][key]) {
+      alert("Category already exists");
+      return;
+    }
+
+    setCategories((prev) => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        [key]: {
+          name: template.name,
+          icon: template.icon,
+          points: template.points,
+          description: template.description,
+        },
+      },
+    }));
     setHasChanges(true);
   };
 
@@ -472,24 +591,6 @@ const Settings = () => {
     }
   };
 
-  const archiveSession = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to archive this session? It will be marked as completed."
-      )
-    )
-      return;
-
-    try {
-      await sessionService.endSession(currentSession.id);
-      await refreshCurrentSession();
-      alert("Session archived successfully");
-    } catch (error) {
-      console.error("Error archiving session:", error);
-      alert("Failed to archive session");
-    }
-  };
-
   const duplicateSession = async () => {
     const newName = prompt(
       "Enter name for duplicated session:",
@@ -507,6 +608,52 @@ const Settings = () => {
     } catch (error) {
       console.error("Error duplicating session:", error);
       alert("Failed to duplicate session");
+    }
+  };
+
+  // Admin management
+  const handleAddAdmin = async () => {
+    if (!newAdminEmail || !newAdminEmail.includes("@")) {
+      alert("Please enter a valid email address");
+      return;
+    }
+
+    try {
+      // In a real implementation, you would:
+      // 1. Look up the user by email
+      // 2. Add their userId to sessionAdmins array
+      // 3. Create a sessionParticipant record with role="sessionAdmin"
+
+      alert(
+        `Admin management: Would add ${newAdminEmail} as admin. Full implementation requires user lookup service.`
+      );
+      setNewAdminEmail("");
+    } catch (error) {
+      console.error("Error adding admin:", error);
+      alert("Failed to add admin");
+    }
+  };
+
+  const handleRemoveAdmin = async (adminId) => {
+    if (adminId === currentSession.createdBy) {
+      alert("Cannot remove session owner");
+      return;
+    }
+
+    if (!confirm("Remove this admin?")) return;
+
+    try {
+      const updatedAdmins = currentSession.sessionAdmins.filter(
+        (id) => id !== adminId
+      );
+      await sessionService.updateSession(currentSession.id, {
+        sessionAdmins: updatedAdmins,
+      });
+      await refreshCurrentSession();
+      alert("Admin removed successfully");
+    } catch (error) {
+      console.error("Error removing admin:", error);
+      alert("Failed to remove admin");
     }
   };
 
@@ -863,7 +1010,7 @@ const Settings = () => {
         {/* Custom Score Categories */}
         <SettingCard
           icon={Target}
-          title="Custom Score Categories"
+          title="Scoring Categories"
           description="Manage scoring categories"
           gradient="bg-gradient-to-r from-pink-500 to-rose-600"
         >
@@ -873,7 +1020,15 @@ const Settings = () => {
               className="w-full bg-pink-600 hover:bg-pink-700 text-white px-4 py-2.5 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2 font-medium text-sm"
             >
               <Plus className="h-4 w-4" />
-              <span>Add Category</span>
+              <span>Add Custom Category</span>
+            </button>
+
+            <button
+              onClick={() => setActiveModal("categoryTemplates")}
+              className="w-full bg-pink-100 hover:bg-pink-200 text-pink-700 px-4 py-2.5 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2 font-medium text-sm"
+            >
+              <FileText className="h-4 w-4" />
+              <span>Choose from Templates</span>
             </button>
 
             <div className="space-y-3">
@@ -886,7 +1041,7 @@ const Settings = () => {
                     ([key, category]) => (
                       <div
                         key={key}
-                        className="flex items-center justify-between bg-green-50 p-3 rounded-lg border border-green-200"
+                        className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 text-sm">
@@ -932,7 +1087,7 @@ const Settings = () => {
                     ([key, category]) => (
                       <div
                         key={key}
-                        className="flex items-center justify-between bg-red-50 p-3 rounded-lg border border-red-200"
+                        className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg"
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 text-sm">
@@ -1024,12 +1179,16 @@ const Settings = () => {
               </label>
             </div>
 
-            <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="w-2 h-2 bg-gray-400 rounded-full mr-2 flex-shrink-0"></div>
-              <span className="text-xs text-gray-700 font-medium">
-                Registration: {formData.registrationOpen ? "Open" : "Closed"}
-              </span>
-              <label className="relative inline-flex items-center cursor-pointer ml-auto">
+            <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+              <div>
+                <h4 className="font-medium text-gray-900 text-sm">
+                  Registration Status
+                </h4>
+                <p className="text-xs text-gray-600">
+                  Allow new participants to join
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
                   className="sr-only peer"
@@ -1039,6 +1198,28 @@ const Settings = () => {
                   }
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div>
+                <h4 className="font-medium text-gray-900 text-sm">
+                  Archive Session
+                </h4>
+                <p className="text-xs text-gray-600">
+                  Mark session as completed
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={formData.isArchived}
+                  onChange={(e) =>
+                    handleInputChange("isArchived", e.target.checked)
+                  }
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-600"></div>
               </label>
             </div>
           </div>
@@ -1074,14 +1255,6 @@ const Settings = () => {
             >
               <Copy className="h-4 w-4" />
               <span>Duplicate Session</span>
-            </button>
-
-            <button
-              onClick={archiveSession}
-              className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-3 rounded-xl transition-colors duration-200 flex items-center space-x-3 border border-orange-200 text-sm font-medium"
-            >
-              <Archive className="h-4 w-4" />
-              <span>Archive Session</span>
             </button>
           </div>
         </SettingCard>
@@ -1121,14 +1294,7 @@ const Settings = () => {
                     </div>
                     {adminId !== currentSession.createdBy && (
                       <button
-                        onClick={() => {
-                          if (confirm("Remove this admin?")) {
-                            // Remove admin logic here
-                            alert(
-                              "Admin removal functionality to be implemented"
-                            );
-                          }
-                        }}
+                        onClick={() => handleRemoveAdmin(adminId)}
                         className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -1148,19 +1314,14 @@ const Settings = () => {
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <input
                     type="email"
-                    value={newAdmin}
-                    onChange={(e) => setNewAdmin(e.target.value)}
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
                     placeholder="Enter email address"
                     className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
                   />
                 </div>
                 <button
-                  onClick={() => {
-                    if (newAdmin) {
-                      alert("Add admin functionality to be implemented");
-                      setNewAdmin("");
-                    }
-                  }}
+                  onClick={handleAddAdmin}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl transition-colors duration-200 flex items-center space-x-2 text-sm font-medium"
                 >
                   <UserPlus className="h-4 w-4" />
@@ -1175,7 +1336,111 @@ const Settings = () => {
         </SettingCard>
       </div>
 
-      {/* Modals */}
+      {/* Category Templates Modal */}
+      {activeModal === "categoryTemplates" && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">
+                Category Templates
+              </h3>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div>
+                <h4 className="font-semibold text-emerald-700 mb-3">
+                  Positive Categories
+                </h4>
+                <div className="space-y-2">
+                  {categoryTemplates.positive.map((template) => (
+                    <div
+                      key={template.key}
+                      className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">
+                          {template.name}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {template.description}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-bold text-emerald-700">
+                          +{template.points} pts
+                        </div>
+                        <button
+                          onClick={() =>
+                            handleAddTemplateCategory(template, "positive")
+                          }
+                          disabled={categories.positive[template.key]}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {categories.positive[template.key] ? "Added" : "Add"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-red-600 mb-3">
+                  Negative Categories
+                </h4>
+                <div className="space-y-2">
+                  {categoryTemplates.negative.map((template) => (
+                    <div
+                      key={template.key}
+                      className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">
+                          {template.name}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {template.description}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-bold text-red-700">
+                          {template.points} pts
+                        </div>
+                        <button
+                          onClick={() =>
+                            handleAddTemplateCategory(template, "negative")
+                          }
+                          disabled={categories.negative[template.key]}
+                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {categories.negative[template.key] ? "Added" : "Add"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end p-6 border-t border-gray-200">
+              <button
+                onClick={() => setActiveModal(null)}
+                className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg font-medium transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Modal */}
       {activeModal === "addCategory" && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
@@ -1299,6 +1564,7 @@ const Settings = () => {
         </div>
       )}
 
+      {/* Edit Category Modal */}
       {activeModal === "editCategory" && editingCategory && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">

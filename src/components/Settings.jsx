@@ -42,8 +42,9 @@ const Settings = () => {
   const sessionService = new SessionService();
   const participantService = new ParticipantService();
 
-const [showDeleteSessionConfirm, setShowDeleteSessionConfirm] = useState(false);
-const [deletingSession, setDeletingSession] = useState(false);
+  const [showDeleteSessionConfirm, setShowDeleteSessionConfirm] =
+    useState(false);
+  const [deletingSession, setDeletingSession] = useState(false);
 
   const handleDeleteSession = async () => {
     try {
@@ -189,11 +190,29 @@ const [deletingSession, setDeletingSession] = useState(false);
     ],
   };
 
-  // Load session data - FIXED: Only update when session ID changes
+  // Load session data - FIXED: Only update when session ID actually changes
   const sessionIdRef = useRef(null);
+  const isInitialLoadRef = useRef(true);
+
   useEffect(() => {
-    if (currentSession && currentSession.id !== sessionIdRef.current) {
+    // Only load form data when:
+    // 1. Initial load (currentSession exists and ref is null)
+    // 2. Session ID actually changes (switching sessions)
+    if (
+      currentSession &&
+      (sessionIdRef.current !== currentSession.id || isInitialLoadRef.current)
+    ) {
+      // Prevent re-running during same session
+      if (
+        sessionIdRef.current === currentSession.id &&
+        !isInitialLoadRef.current
+      ) {
+        return;
+      }
+
       sessionIdRef.current = currentSession.id;
+      isInitialLoadRef.current = false;
+
       setFormData({
         trainingName: currentSession.name || "",
         cohort: currentSession.cohort || "",
@@ -204,7 +223,6 @@ const [deletingSession, setDeletingSession] = useState(false);
         registrationOpen: currentSession.registrationOpen ?? true,
         allowNegativeScores: currentSession.allowNegativeScores ?? true,
         allowDecimalScores: currentSession.allowDecimalScores ?? false,
-        // FIX: Check if status is 'completed' to determine if archived
         isArchived: currentSession.status === "completed",
       });
       setCategories(
@@ -212,51 +230,69 @@ const [deletingSession, setDeletingSession] = useState(false);
       );
       setHasChanges(false);
     }
-  }, [currentSession?.id]); // Make sure to depend on currentSession.id only
+  }, [currentSession]); // Depend on entire object but guard with ref check
 
   const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    setHasChanges(true);
+  setFormData((prev) => {
+    const newFormData = { ...prev, [field]: value };
+    // Check if the new form data is different from the original session data
+    // This is a simplified check; a deep comparison is more robust for complex objects
+    const hasAnyChanges = JSON.stringify(newFormData) !== JSON.stringify({
+      trainingName: currentSession.name || "",
+      cohort: currentSession.cohort || "",
+      startDate: currentSession.startDate || "",
+      endDate: currentSession.endDate || "",
+      minScore: currentSession.scoringScale?.min || -50,
+      maxScore: currentSession.scoringScale?.max || 50,
+      registrationOpen: currentSession.registrationOpen ?? true,
+      allowNegativeScores: currentSession.allowNegativeScores ?? true,
+      allowDecimalScores: currentSession.allowDecimalScores ?? false,
+      isArchived: currentSession.status === "completed",
+    });
+
+    setHasChanges(hasAnyChanges); // Update hasChanges based on the comparison
+    return newFormData;
+  });
+};
+
+  const handleSave = async () => {
+    if (!currentSession?.id) return;
+
+    try {
+      setSaving(true);
+
+      const updateData = {
+        name: formData.trainingName,
+        cohort: formData.cohort,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        scoringScale: {
+          min: formData.minScore,
+          max: formData.maxScore,
+        },
+        registrationOpen: formData.registrationOpen,
+        allowNegativeScores: formData.allowNegativeScores,
+        allowDecimalScores: formData.allowDecimalScores,
+        scoringCategories: categories,
+        status: formData.isArchived ? "completed" : "active",
+      };
+
+      // If archiving, ensure registration is closed
+      if (formData.isArchived) {
+        updateData.registrationOpen = false;
+      }
+
+      await sessionService.updateSession(currentSession.id, updateData);
+
+      await refreshCurrentSession();
+      setHasChanges(false);
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      alert("Failed to save settings. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
-
- const handleSave = async () => {
-   if (!currentSession?.id) return;
-
-   try {
-     setSaving(true);
-
-     const updateData = {
-       name: formData.trainingName,
-       cohort: formData.cohort,
-       startDate: formData.startDate,
-       endDate: formData.endDate,
-       scoringScale: {
-         min: formData.minScore,
-         max: formData.maxScore,
-       },
-       registrationOpen: formData.registrationOpen,
-       allowNegativeScores: formData.allowNegativeScores,
-       allowDecimalScores: formData.allowDecimalScores,
-       scoringCategories: categories,
-       status: formData.isArchived ? "completed" : "active",
-     };
-
-     // If archiving, ensure registration is closed
-     if (formData.isArchived) {
-       updateData.registrationOpen = false;
-     }
-
-     await sessionService.updateSession(currentSession.id, updateData);
-
-     await refreshCurrentSession();
-     setHasChanges(false);
-   } catch (error) {
-     console.error("Error saving settings:", error);
-     alert("Failed to save settings. Please try again.");
-   } finally {
-     setSaving(false);
-   }
- };
 
   const handleReset = () => {
     if (currentSession) {

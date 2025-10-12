@@ -1,4 +1,4 @@
-// src/components/EditParticipantModal.jsx
+// src/components/EditParticipantModal.jsx - ADDED DELETE FUNCTIONALITY
 import React, { useState, useEffect } from "react";
 import {
   X,
@@ -12,6 +12,7 @@ import {
   CheckCircle,
   AlertCircle,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { ParticipantService } from "../services/participantService";
 
@@ -33,6 +34,8 @@ const EditParticipantModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const participantService = new ParticipantService();
 
@@ -48,12 +51,14 @@ const EditParticipantModal = ({
       });
       setError("");
       setSuccess("");
+      setShowDeleteConfirm(false);
     }
   }, [participant, isOpen]);
 
   const handleClose = () => {
     setError("");
     setSuccess("");
+    setShowDeleteConfirm(false);
     onClose();
   };
 
@@ -94,6 +99,31 @@ const EditParticipantModal = ({
       setError(err.message || "Failed to update participant");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      setDeleting(true);
+      setError("");
+
+      await participantService.deleteParticipant(participant.id);
+
+      setSuccess("Participant deleted successfully!");
+
+      if (onParticipantUpdated) {
+        onParticipantUpdated();
+      }
+
+      setTimeout(() => {
+        handleClose();
+      }, 1500);
+    } catch (err) {
+      console.error("Error deleting participant:", err);
+      setError(err.message || "Failed to delete participant");
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -271,34 +301,94 @@ const EditParticipantModal = ({
 
         {/* Footer - Always visible */}
         <div className="border-t border-gray-200 p-4 sm:p-6 bg-gray-50 flex-shrink-0">
-          <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+          <div className="flex flex-col sm:flex-row justify-between space-y-2 sm:space-y-0 sm:space-x-3">
             <button
               type="button"
-              onClick={handleClose}
-              className="w-full sm:w-auto px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={loading || deleting}
+              className="w-full sm:w-auto px-4 py-2 text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
-              Cancel
+              <Trash2 className="h-4 w-4" />
+              <span>Delete Participant</span>
             </button>
 
-            <button
-              onClick={handleSubmit}
-              disabled={loading || !formData.name.trim()}
-              className="w-full sm:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
-            >
-              {loading ? (
-                <>
-                  <Loader className="animate-spin h-4 w-4" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  <span>Save Changes</span>
-                </>
-              )}
-            </button>
+            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={loading || deleting}
+                className="w-full sm:w-auto px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleSubmit}
+                disabled={loading || deleting || !formData.name.trim()}
+                className="w-full sm:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="animate-spin h-4 w-4" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-10">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+              <div className="flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-red-600" />
+              </div>
+
+              <h3 className="text-xl font-bold text-gray-900 text-center mb-2">
+                Delete Participant?
+              </h3>
+
+              <p className="text-gray-600 text-center mb-4">
+                This will remove <strong>{participant.name}</strong> from the
+                session. They can be re-added later if needed.
+              </p>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader className="animate-spin h-4 w-4 mr-2" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

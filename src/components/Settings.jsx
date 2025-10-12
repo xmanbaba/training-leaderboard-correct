@@ -5,6 +5,7 @@ import {
   Users,
   Share2,
   Save,
+  AlertCircle,
   X,
   Trophy,
   Sliders,
@@ -38,6 +39,26 @@ const Settings = () => {
 
   const sessionService = new SessionService();
   const participantService = new ParticipantService();
+
+const [showDeleteSessionConfirm, setShowDeleteSessionConfirm] = useState(false);
+const [deletingSession, setDeletingSession] = useState(false);
+
+  const handleDeleteSession = async () => {
+    try {
+      setDeletingSession(true);
+
+      await sessionService.deleteSession(currentSession.id);
+
+      // Navigate away after deletion
+      navigate("/sessions");
+    } catch (error) {
+      console.error("Error deleting session:", error);
+      alert("Failed to delete session");
+    } finally {
+      setDeletingSession(false);
+      setShowDeleteSessionConfirm(false);
+    }
+  };
 
   const [formData, setFormData] = useState({
     trainingName: "",
@@ -181,6 +202,7 @@ const Settings = () => {
         registrationOpen: currentSession.registrationOpen ?? true,
         allowNegativeScores: currentSession.allowNegativeScores ?? true,
         allowDecimalScores: currentSession.allowDecimalScores ?? false,
+        // FIX: Check if status is 'completed' to determine if archived
         isArchived: currentSession.status === "completed",
       });
       setCategories(
@@ -188,7 +210,7 @@ const Settings = () => {
       );
       setHasChanges(false);
     }
-  }, [currentSession?.id]);
+  }, [currentSession?.id]); // Make sure to depend on currentSession.id only
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1256,6 +1278,14 @@ const Settings = () => {
               <Copy className="h-4 w-4" />
               <span>Duplicate Session</span>
             </button>
+
+            <button
+              onClick={() => setShowDeleteSessionConfirm(true)}
+              className="w-full bg-red-50 hover:bg-red-100 text-red-700 px-4 py-3 rounded-xl transition-colors duration-200 flex items-center space-x-3 border border-red-200 text-sm font-medium"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete Session</span>
+            </button>
           </div>
         </SettingCard>
 
@@ -1672,6 +1702,53 @@ const Settings = () => {
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>
+        </div>
+      )}
+
+      {showDeleteSessionConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mx-auto mb-4">
+              <AlertCircle className="h-8 w-8 text-red-600" />
+            </div>
+
+            <h3 className="text-xl font-bold text-gray-900 text-center mb-2">
+              Delete Session?
+            </h3>
+
+            <p className="text-gray-600 text-center mb-4">
+              This will permanently delete{" "}
+              <strong>{currentSession.name}</strong> and all associated data.
+              This action cannot be undone.
+            </p>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteSessionConfirm(false)}
+                disabled={deletingSession}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSession}
+                disabled={deletingSession}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                {deletingSession ? (
+                  <>
+                    <Loader className="animate-spin h-4 w-4 mr-2" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

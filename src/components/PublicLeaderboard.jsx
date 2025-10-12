@@ -178,9 +178,7 @@ const PublicLeaderboard = () => {
       pdf.setFontSize(16);
       pdf.setFont("helvetica", "bold");
       const modeText =
-        viewMode === "individual"
-          ? "🏆 Individual Rankings"
-          : "👥 Team Rankings";
+        viewMode === "individual" ? "Individual Rankings" : "Team Rankings";
       pdf.text(modeText, margin, yPos);
 
       yPos += 15;

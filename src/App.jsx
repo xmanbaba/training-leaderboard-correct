@@ -1,4 +1,4 @@
-// src/App.jsx - Added Teams route
+// src/App.jsx - Added public leaderboard route and Teams route
 import React from "react";
 import "./App.css";
 import {
@@ -23,6 +23,7 @@ import LandingPage from "./components/LandingPage";
 import RoleGuard from "./components/RoleGuard";
 import QuickScoring from "./components/QuickScoring";
 import Settings from "./components/Settings";
+import PublicLeaderboard from "./components/PublicLeaderboard";
 import { scoringCategories } from "./data/mockData";
 
 // Helper function for level calculation
@@ -65,7 +66,6 @@ const calculateLevel = (participant) => {
 // Wrapper component to force remount on location change
 function RouteWrapper({ children }) {
   const location = useLocation();
-  // Use pathname as key to force remount when route changes
   return <React.Fragment key={location.pathname}>{children}</React.Fragment>;
 }
 
@@ -80,6 +80,12 @@ export default function App() {
             <Route path="/auth" element={<Home />} />
             <Route path="/join/:joinCode" element={<ParticipantJoin />} />
             <Route path="/join" element={<ParticipantJoin />} />
+
+            {/* Public Leaderboard - No authentication required */}
+            <Route
+              path="/public/leaderboard/:sessionId"
+              element={<PublicLeaderboard />}
+            />
 
             {/* Protected: Session Selector */}
             <Route

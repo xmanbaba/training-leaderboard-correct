@@ -1,3 +1,4 @@
+// src/components/Leaderboard.jsx - Updated with Individual/Team toggle and sharing
 import React, { useState, useEffect } from "react";
 import {
   Trophy,
@@ -10,6 +11,11 @@ import {
   Search,
   Filter,
   Users,
+  Share2,
+  Copy,
+  Check,
+  UsersRound,
+  X,
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
@@ -18,9 +24,11 @@ const Leaderboard = ({ scoringCategories }) => {
   const { currentSession } = useSession();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("score");
-  const [scoringMode, setScoringMode] = useState("individual");
+  const [viewMode, setViewMode] = useState("individual"); // 'individual' or 'team'
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const participantService = new ParticipantService();
 
@@ -42,11 +50,45 @@ const Leaderboard = ({ scoringCategories }) => {
     }
   }, [currentSession?.id]);
 
-  // Sort and filter participants
+  // Calculate team scores
+  const calculateTeams = () => {
+    const teamMap = new Map();
+
+    participants.forEach((participant) => {
+      if (participant.team) {
+        if (!teamMap.has(participant.team)) {
+          teamMap.set(participant.team, {
+            name: participant.team,
+            members: [],
+            totalScore: 0,
+            avgScore: 0,
+          });
+        }
+
+        const team = teamMap.get(participant.team);
+        team.members.push(participant);
+        team.totalScore += participant.totalScore || 0;
+      }
+    });
+
+    const teamsArray = Array.from(teamMap.values()).map((team) => ({
+      ...team,
+      avgScore:
+        team.members.length > 0
+          ? Math.round(team.totalScore / team.members.length)
+          : 0,
+      memberCount: team.members.length,
+    }));
+
+    return teamsArray;
+  };
+
+  const teams = calculateTeams();
+
+  // Sort function for individuals
   const getSortedParticipants = () => {
     let sorted = [...participants];
 
-    // Sort by selected criteria
     switch (sortBy) {
       case "score":
         sorted.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
@@ -66,14 +108,40 @@ const Leaderboard = ({ scoringCategories }) => {
     return sorted;
   };
 
-  const sortedParticipants = getSortedParticipants();
+  // Sort function for teams
+  const getSortedTeams = () => {
+    let sorted = [...teams];
 
-  // Filter participants based on search
+    switch (sortBy) {
+      case "score":
+        sorted.sort((a, b) => b.totalScore - a.totalScore);
+        break;
+      case "name":
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "members":
+        sorted.sort((a, b) => b.memberCount - a.memberCount);
+        break;
+      default:
+        sorted.sort((a, b) => b.totalScore - a.totalScore);
+    }
+
+    return sorted;
+  };
+
+  const sortedParticipants = getSortedParticipants();
+  const sortedTeams = getSortedTeams();
+
+  // Filter based on view mode
   const filteredParticipants = sortedParticipants.filter(
     (participant) =>
       participant.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       participant.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       participant.department?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredTeams = sortedTeams.filter((team) =>
+    team.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getRankIcon = (index) => {
@@ -118,6 +186,22 @@ const Leaderboard = ({ scoringCategories }) => {
     }
   };
 
+  const getPublicShareUrl = () => {
+    if (!currentSession?.id) return "";
+    return `${window.location.origin}/public/leaderboard/${currentSession.id}`;
+  };
+
+  const handleCopyLink = async () => {
+    const shareUrl = getPublicShareUrl();
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   const ParticipantCard = ({ participant, index }) => {
     const positiveScore = Object.entries(participant.scores || {})
       .filter(([key]) => scoringCategories?.positive?.[key])
@@ -135,7 +219,6 @@ const Leaderboard = ({ scoringCategories }) => {
           rankStyle.card
         } ${isTopThree ? rankStyle.glow + " shadow-lg" : ""}`}
       >
-        {/* Rank Badge */}
         <div className="flex items-center space-x-3 md:space-x-4">
           <div
             className={`relative w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-white text-base md:text-lg ${rankStyle.badge} shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0`}
@@ -148,7 +231,6 @@ const Leaderboard = ({ scoringCategories }) => {
             )}
           </div>
 
-          {/* Participant Info */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-100 to-indigo-200 rounded-full flex items-center justify-center flex-shrink-0">
@@ -191,7 +273,6 @@ const Leaderboard = ({ scoringCategories }) => {
             </div>
           </div>
 
-          {/* Scores */}
           <div className="text-right space-y-2 flex-shrink-0">
             <div
               className={`inline-flex items-center px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold text-base md:text-xl ${
@@ -233,6 +314,83 @@ const Leaderboard = ({ scoringCategories }) => {
     );
   };
 
+  const TeamCard = ({ team, index }) => {
+    const isTopThree = index < 3;
+    const rankStyle = getRankStyle(index);
+
+    return (
+      <div
+        className={`group relative p-4 md:p-6 rounded-2xl border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+          rankStyle.card
+        } ${isTopThree ? rankStyle.glow + " shadow-lg" : ""}`}
+      >
+        <div className="flex items-center space-x-3 md:space-x-4">
+          <div
+            className={`relative w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-white text-base md:text-lg ${rankStyle.badge} shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0`}
+          >
+            {index < 3 ? getRankIcon(index) : index + 1}
+            {index === 0 && (
+              <div className="absolute -top-1 -right-1">
+                <Star className="h-4 w-4 text-amber-400 fill-current animate-pulse" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-indigo-100 to-purple-200 rounded-full flex items-center justify-center flex-shrink-0">
+                <UsersRound className="h-5 w-5 md:h-6 md:w-6 text-indigo-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
+                  <h3 className="font-bold text-gray-900 text-base md:text-lg truncate group-hover:text-blue-600 transition-colors">
+                    {team.name}
+                  </h3>
+                  {isTopThree && (
+                    <div className="flex-shrink-0">
+                      {index === 0 && (
+                        <span className="text-amber-600 text-xs md:text-sm font-medium">
+                          Leading Team
+                        </span>
+                      )}
+                      {index === 1 && (
+                        <span className="text-gray-600 text-xs md:text-sm font-medium">
+                          2nd Place
+                        </span>
+                      )}
+                      {index === 2 && (
+                        <span className="text-orange-600 text-xs md:text-sm font-medium">
+                          3rd Place
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs md:text-sm text-gray-600">
+                  {team.memberCount} members • Avg: {team.avgScore} pts
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-right space-y-2 flex-shrink-0">
+            <div
+              className={`inline-flex items-center px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold text-base md:text-xl ${
+                team.totalScore >= 0
+                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                  : "bg-red-100 text-red-800 border border-red-200"
+              }`}
+            >
+              {team.totalScore > 0 ? "+" : ""}
+              {team.totalScore}
+            </div>
+            <div className="text-xs md:text-sm text-gray-500">total points</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
@@ -243,6 +401,9 @@ const Leaderboard = ({ scoringCategories }) => {
       </div>
     );
   }
+
+  const displayData =
+    viewMode === "individual" ? filteredParticipants : filteredTeams;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6 space-y-6">
@@ -259,45 +420,85 @@ const Leaderboard = ({ scoringCategories }) => {
                 See who's leading the competition and celebrate achievements
               </p>
             </div>
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 md:px-6 py-2 md:py-3 rounded-xl transition-all duration-200 font-medium text-sm md:text-base border border-white/30"
+            >
+              <Share2 className="h-4 w-4 md:h-5 md:w-5" />
+              <span>Share Public</span>
+            </button>
           </div>
         </div>
         <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-white/5 rounded-full -translate-y-16 md:-translate-y-32 translate-x-16 md:translate-x-32"></div>
       </div>
 
-      {/* Search and Filters */}
+      {/* View Mode Toggle & Filters */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0 lg:space-x-4">
-          {/* Search Bar */}
-          <div className="relative flex-1 max-w-full lg:max-w-md">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search participants..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm md:text-base"
-            />
+        <div className="flex flex-col space-y-4">
+          {/* View Mode Toggle */}
+          <div className="flex items-center justify-center">
+            <div className="inline-flex bg-gray-100 rounded-xl p-1">
+              <button
+                onClick={() => setViewMode("individual")}
+                className={`flex items-center space-x-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
+                  viewMode === "individual"
+                    ? "bg-white text-blue-600 shadow-md"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <User className="h-4 w-4 md:h-5 md:w-5" />
+                <span>Individuals</span>
+              </button>
+              <button
+                onClick={() => setViewMode("team")}
+                className={`flex items-center space-x-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium text-sm md:text-base transition-all duration-200 ${
+                  viewMode === "team"
+                    ? "bg-white text-blue-600 shadow-md"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <UsersRound className="h-4 w-4 md:h-5 md:w-5" />
+                <span>Teams</span>
+              </button>
+            </div>
           </div>
 
-          {/* Sort Options */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-            <div className="flex items-center space-x-2">
-              <Filter className="h-5 w-5 text-gray-500 flex-shrink-0" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="flex-1 sm:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="score">Highest Score</option>
-                <option value="name">Name A-Z</option>
-                <option value="department">Department</option>
-              </select>
+          {/* Search and Sort */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0 lg:space-x-4">
+            <div className="relative flex-1 max-w-full lg:max-w-md">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder={`Search ${
+                  viewMode === "individual" ? "participants" : "teams"
+                }...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm md:text-base"
+              />
             </div>
 
-            {/* Results Count */}
-            <div className="text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-lg text-center sm:text-left">
-              {filteredParticipants.length} result
-              {filteredParticipants.length !== 1 ? "s" : ""}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+              <div className="flex items-center space-x-2">
+                <Filter className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="flex-1 sm:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                >
+                  <option value="score">Highest Score</option>
+                  <option value="name">Name A-Z</option>
+                  {viewMode === "individual" ? (
+                    <option value="department">Department</option>
+                  ) : (
+                    <option value="members">Most Members</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-lg text-center sm:text-left">
+                {displayData.length} result{displayData.length !== 1 ? "s" : ""}
+              </div>
             </div>
           </div>
         </div>
@@ -305,24 +506,26 @@ const Leaderboard = ({ scoringCategories }) => {
 
       {/* Leaderboard Content */}
       <div className="space-y-4">
-        {filteredParticipants.length > 0 ? (
-          filteredParticipants.map((participant, index) => (
-            <ParticipantCard
-              key={participant.id}
-              participant={participant}
-              index={index}
-            />
-          ))
+        {displayData.length > 0 ? (
+          displayData.map((item, index) =>
+            viewMode === "individual" ? (
+              <ParticipantCard key={item.id} participant={item} index={index} />
+            ) : (
+              <TeamCard key={item.name} team={item} index={index} />
+            )
+          )
         ) : (
           <div className="bg-white rounded-2xl border border-gray-200 p-8 md:p-12 text-center">
             <Trophy className="h-12 w-12 md:h-16 md:w-16 mx-auto mb-4 text-gray-300" />
             <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
-              No participants found
+              No {viewMode === "individual" ? "participants" : "teams"} found
             </h3>
             <p className="text-sm md:text-base text-gray-600">
               {searchTerm
                 ? "Try adjusting your search terms"
-                : "No participants available yet"}
+                : `No ${
+                    viewMode === "individual" ? "participants" : "teams"
+                  } available yet`}
             </p>
           </div>
         )}
@@ -338,10 +541,14 @@ const Leaderboard = ({ scoringCategories }) => {
             Current Leader
           </h3>
           <p className="text-xl md:text-2xl font-bold text-blue-600 mb-1 truncate">
-            {filteredParticipants[0]?.name || "None"}
+            {displayData[0]?.name || "None"}
           </p>
           <p className="text-xs md:text-sm text-gray-600">
-            {filteredParticipants[0]?.totalScore || 0} points
+            {viewMode === "individual"
+              ? `${displayData[0]?.totalScore || 0} points`
+              : `${displayData[0]?.totalScore || 0} points • ${
+                  displayData[0]?.memberCount || 0
+                } members`}
           </p>
         </div>
 
@@ -354,10 +561,10 @@ const Leaderboard = ({ scoringCategories }) => {
           </h3>
           <p className="text-xl md:text-2xl font-bold text-emerald-600 mb-1">
             {Math.round(
-              filteredParticipants.reduce(
-                (sum, p) => sum + (p.totalScore || 0),
+              displayData.reduce(
+                (sum, item) => sum + (item.totalScore || 0),
                 0
-              ) / (filteredParticipants.length || 1)
+              ) / (displayData.length || 1)
             )}
           </p>
           <p className="text-xs md:text-sm text-gray-600">points average</p>
@@ -365,17 +572,95 @@ const Leaderboard = ({ scoringCategories }) => {
 
         <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center group hover:shadow-lg transition-all duration-300">
           <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full mx-auto mb-4 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-            <User className="h-6 w-6 text-white" />
+            {viewMode === "individual" ? (
+              <User className="h-6 w-6 text-white" />
+            ) : (
+              <UsersRound className="h-6 w-6 text-white" />
+            )}
           </div>
           <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">
-            Total Participants
+            Total {viewMode === "individual" ? "Participants" : "Teams"}
           </h3>
           <p className="text-xl md:text-2xl font-bold text-blue-600 mb-1">
-            {filteredParticipants.length}
+            {displayData.length}
           </p>
-          <p className="text-xs md:text-sm text-gray-600">active learners</p>
+          <p className="text-xs md:text-sm text-gray-600">
+            {viewMode === "individual" ? "active learners" : "competing teams"}
+          </p>
         </div>
       </div>
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">
+                Share Leaderboard
+              </h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Share this public leaderboard link. Updates in real-time, no login
+              required!
+            </p>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 flex items-center space-x-2">
+              <input
+                type="text"
+                readOnly
+                value={getPublicShareUrl()}
+                className="flex-1 bg-transparent text-sm text-gray-700 outline-none"
+              />
+              <button
+                onClick={handleCopyLink}
+                className={`flex items-center space-x-1 px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  copied
+                    ? "bg-green-100 text-green-700"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <h4 className="font-semibold text-blue-900 text-sm mb-2">
+                Features:
+              </h4>
+              <ul className="text-xs text-blue-700 space-y-1">
+                <li>✓ Real-time updates</li>
+                <li>✓ No login required</li>
+                <li>✓ Download as PDF</li>
+                <li>✓ Mobile responsive</li>
+              </ul>
+            </div>
+
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="w-full mt-4 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-3 px-4 rounded-xl transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

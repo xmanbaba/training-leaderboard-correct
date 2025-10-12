@@ -347,12 +347,18 @@ const SessionSelector = () => {
                       <div className="flex items-center justify-between">
                         <span
                           className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            session.registrationOpen
+                            session.status === "completed"
+                              ? "bg-gray-100 text-gray-600"
+                              : session.registrationOpen
                               ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-600"
+                              : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
-                          {session.registrationOpen ? "Open" : "Closed"}
+                          {session.status === "completed"
+                            ? "Archived"
+                            : session.registrationOpen
+                            ? "Open"
+                            : "Closed"}
                         </span>
                         <span className="text-blue-600 group-hover:text-blue-700 font-medium text-xs md:text-sm">
                           Enter →

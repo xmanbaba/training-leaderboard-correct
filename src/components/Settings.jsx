@@ -1,5 +1,6 @@
 // src/components/Settings.jsx
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Settings as SettingsIcon,
   Users,
@@ -30,6 +31,7 @@ import { SessionService } from "../services/sessionService";
 import { ParticipantService } from "../services/participantService";
 
 const Settings = () => {
+  const navigate = useNavigate();
   const { currentSession, refreshCurrentSession } = useSession();
   const [hasChanges, setHasChanges] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -217,36 +219,44 @@ const [deletingSession, setDeletingSession] = useState(false);
     setHasChanges(true);
   };
 
-  const handleSave = async () => {
-    if (!currentSession?.id) return;
+ const handleSave = async () => {
+   if (!currentSession?.id) return;
 
-    try {
-      setSaving(true);
-      await sessionService.updateSession(currentSession.id, {
-        name: formData.trainingName,
-        cohort: formData.cohort,
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        scoringScale: {
-          min: formData.minScore,
-          max: formData.maxScore,
-        },
-        registrationOpen: formData.registrationOpen,
-        allowNegativeScores: formData.allowNegativeScores,
-        allowDecimalScores: formData.allowDecimalScores,
-        scoringCategories: categories,
-        status: formData.isArchived ? "completed" : "active",
-      });
+   try {
+     setSaving(true);
 
-      await refreshCurrentSession();
-      setHasChanges(false);
-    } catch (error) {
-      console.error("Error saving settings:", error);
-      alert("Failed to save settings. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
+     const updateData = {
+       name: formData.trainingName,
+       cohort: formData.cohort,
+       startDate: formData.startDate,
+       endDate: formData.endDate,
+       scoringScale: {
+         min: formData.minScore,
+         max: formData.maxScore,
+       },
+       registrationOpen: formData.registrationOpen,
+       allowNegativeScores: formData.allowNegativeScores,
+       allowDecimalScores: formData.allowDecimalScores,
+       scoringCategories: categories,
+       status: formData.isArchived ? "completed" : "active",
+     };
+
+     // If archiving, ensure registration is closed
+     if (formData.isArchived) {
+       updateData.registrationOpen = false;
+     }
+
+     await sessionService.updateSession(currentSession.id, updateData);
+
+     await refreshCurrentSession();
+     setHasChanges(false);
+   } catch (error) {
+     console.error("Error saving settings:", error);
+     alert("Failed to save settings. Please try again.");
+   } finally {
+     setSaving(false);
+   }
+ };
 
   const handleReset = () => {
     if (currentSession) {
@@ -1229,7 +1239,7 @@ const [deletingSession, setDeletingSession] = useState(false);
                   Archive Session
                 </h4>
                 <p className="text-xs text-gray-600">
-                  Mark session as completed
+                  Mark session as completed (closes registration)
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -1237,9 +1247,13 @@ const [deletingSession, setDeletingSession] = useState(false);
                   type="checkbox"
                   className="sr-only peer"
                   checked={formData.isArchived}
-                  onChange={(e) =>
-                    handleInputChange("isArchived", e.target.checked)
-                  }
+                  onChange={(e) => {
+                    const isArchived = e.target.checked;
+                    handleInputChange("isArchived", isArchived);
+                    // When archiving, also close registration
+                    // When unarchiving, open registration
+                    handleInputChange("registrationOpen", !isArchived);
+                  }}
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gray-600"></div>
               </label>

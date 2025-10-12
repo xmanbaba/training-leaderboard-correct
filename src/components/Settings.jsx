@@ -232,12 +232,22 @@ const Settings = () => {
     }
   }, [currentSession]); // Depend on entire object but guard with ref check
 
-  const handleInputChange = (field, value) => {
-  setFormData((prev) => {
-    const newFormData = { ...prev, [field]: value };
-    // Check if the new form data is different from the original session data
-    // This is a simplified check; a deep comparison is more robust for complex objects
-    const hasAnyChanges = JSON.stringify(newFormData) !== JSON.stringify({
+ // Replace your handleInputChange function with this:
+
+const handleInputChange = (field, value) => {
+  setFormData((prev) => ({
+    ...prev,
+    [field]: value,
+  }));
+};
+
+// Add this useEffect to detect changes after formData updates (debounced)
+useEffect(() => {
+  if (!currentSession) return;
+
+  // Debounce the change detection to avoid excessive comparisons
+  const timeoutId = setTimeout(() => {
+    const originalData = {
       trainingName: currentSession.name || "",
       cohort: currentSession.cohort || "",
       startDate: currentSession.startDate || "",
@@ -248,12 +258,14 @@ const Settings = () => {
       allowNegativeScores: currentSession.allowNegativeScores ?? true,
       allowDecimalScores: currentSession.allowDecimalScores ?? false,
       isArchived: currentSession.status === "completed",
-    });
+    };
 
-    setHasChanges(hasAnyChanges); // Update hasChanges based on the comparison
-    return newFormData;
-  });
-};
+    const hasAnyChanges = JSON.stringify(formData) !== JSON.stringify(originalData);
+    setHasChanges(hasAnyChanges);
+  }, 300); // Wait 300ms after last keystroke before checking
+
+  return () => clearTimeout(timeoutId);
+}, [formData, currentSession]);
 
   const handleSave = async () => {
     if (!currentSession?.id) return;

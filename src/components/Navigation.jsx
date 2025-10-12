@@ -1,15 +1,17 @@
-// src/components/Navigation.jsx - Updated for session-based roles
+// src/components/Navigation.jsx - Updated with Sessions, Scoring, and Teams
 import React from "react";
 import { NavLink, useParams } from "react-router-dom";
 import {
   BarChart3,
   Trophy,
-  Plus,
   Users,
   Settings,
   ChevronLeft,
   Target,
   TrendingUp,
+  Layers,
+  UsersRound,
+  Zap,
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 
@@ -43,6 +45,13 @@ const Navigation = ({ collapsed, setCollapsed }) => {
         path: `/session/${sessionId}/participants`,
         description: "View learners",
       },
+      {
+        id: "teams",
+        label: "Teams",
+        icon: UsersRound,
+        path: `/session/${sessionId}/teams`,
+        description: "Team overview",
+      },
     ];
 
     // Add admin-only items
@@ -50,11 +59,18 @@ const Navigation = ({ collapsed, setCollapsed }) => {
       return [
         ...baseItems,
         {
-          id: "quick-scoring",
-          label: "Quick Score",
-          icon: Plus,
+          id: "scoring",
+          label: "Scoring",
+          icon: Zap,
           path: `/session/${sessionId}/quick-scoring`,
           description: "Award points",
+        },
+        {
+          id: "sessions",
+          label: "Sessions",
+          icon: Layers,
+          path: `/sessions`,
+          description: "All sessions",
         },
         {
           id: "settings",

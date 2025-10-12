@@ -1,4 +1,4 @@
-// src/components/SessionLayout.jsx - Redesigned with sidebar and share
+// src/components/SessionLayout.jsx - Updated navigation with Sessions, Scoring, and Teams
 import React, { useState, useEffect, useRef } from "react";
 import { Outlet, useParams, useNavigate, NavLink } from "react-router-dom";
 import {
@@ -17,6 +17,8 @@ import {
   Share2,
   Copy,
   Check,
+  Layers,
+  UsersRound,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useSession } from "../contexts/SessionContext";
@@ -80,7 +82,7 @@ const SessionLayout = () => {
   const isSessionAdmin = currentSession?.roles?.sessionAdmin || false;
   const isOrgAdmin = currentSession?.roles?.orgAdmin || false;
 
-  // Navigation items
+  // Navigation items - UPDATED
   const navigationItems = [
     {
       name: "Dashboard",
@@ -101,9 +103,22 @@ const SessionLayout = () => {
       show: true,
     },
     {
-      name: "Quick Scoring",
+      name: "Teams",
+      path: `/session/${sessionId}/teams`,
+      icon: UsersRound,
+      show: true,
+    },
+    {
+      name: "Scoring",
       path: `/session/${sessionId}/quick-scoring`,
       icon: Zap,
+      show: isSessionAdmin || isOrgAdmin,
+      adminOnly: true,
+    },
+    {
+      name: "Sessions",
+      path: `/sessions`,
+      icon: Layers,
       show: isSessionAdmin || isOrgAdmin,
       adminOnly: true,
     },

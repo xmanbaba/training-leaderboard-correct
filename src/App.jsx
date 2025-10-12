@@ -1,4 +1,4 @@
-// src/App.jsx - Fixed navigation reloading issue
+// src/App.jsx - Added Teams route
 import React from "react";
 import "./App.css";
 import {
@@ -16,6 +16,7 @@ import SessionLayout from "./components/SessionLayout";
 import Dashboard from "./components/Dashboard";
 import Leaderboard from "./components/Leaderboard";
 import Participants from "./components/Participants";
+import Teams from "./components/Teams";
 import ParticipantJoin from "./components/ParticipantJoin";
 import SessionSelector from "./components/SessionSelector";
 import LandingPage from "./components/LandingPage";
@@ -125,6 +126,16 @@ export default function App() {
                 element={
                   <RouteWrapper>
                     <Participants calculateLevel={calculateLevel} />
+                  </RouteWrapper>
+                }
+              />
+
+              {/* Teams - accessible to all */}
+              <Route
+                path="teams"
+                element={
+                  <RouteWrapper>
+                    <Teams calculateLevel={calculateLevel} />
                   </RouteWrapper>
                 }
               />

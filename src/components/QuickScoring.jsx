@@ -1,10 +1,12 @@
-// Scoring.jsx - Enhanced with better UI, team scoring, and notes
+// QuickScoring.jsx - Enhanced with better UI, team scoring, and responsive design
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   User,
   Zap,
   Users,
   Trophy,
+  Plus,
+  Minus,
   Award,
   TrendingUp,
   Target,
@@ -14,10 +16,6 @@ import {
   Share2,
   Copy,
   Check,
-  Settings,
-  Download,
-  ExternalLink,
-  FileText,
   ChevronRight,
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
@@ -27,7 +25,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 const DEFAULT_SCALE = { min: -5, max: 5 };
 
-export default function Scoring({ calculateLevel }) {
+export default function QuickScoring({ calculateLevel }) {
   const { user } = useAuth();
   const { currentSession } = useSession();
   const participantService = useMemo(() => new ParticipantService(), []);
@@ -57,7 +55,6 @@ export default function Scoring({ calculateLevel }) {
         currentSession.id,
         async (updatedParticipants) => {
           setParticipants(updatedParticipants);
-          // Load teams
           const teamData = await participantService.getSessionTeams(
             currentSession.id
           );
@@ -79,14 +76,12 @@ export default function Scoring({ calculateLevel }) {
     negative: {},
   };
 
-  // Generate public share URL
   const generateShareUrl = () => {
     if (!currentSession?.id) return "";
     const baseUrl = window.location.origin;
     return `${baseUrl}/public/leaderboard/${currentSession.id}`;
   };
 
-  // Filtered data
   const sortedParticipants = useMemo(() => {
     let list = [...participants];
 
@@ -142,7 +137,7 @@ export default function Scoring({ calculateLevel }) {
         categoryKey,
         changeAmount,
         user?.uid,
-        note || "Manual scoring via Scoring page"
+        note || "Manual scoring via Quick Scoring"
       );
 
       const p = participants.find((x) => x.id === participantId);
@@ -160,6 +155,39 @@ export default function Scoring({ calculateLevel }) {
     } catch (err) {
       console.error("Failed to update score:", err);
       pushToast("Failed to update score. Try again.", true);
+    }
+  };
+
+  const handleTeamScoreChange = async (teamName, categoryKey, changeAmount) => {
+    try {
+      const teamMembers = participants.filter((p) => p.team === teamName);
+
+      await Promise.all(
+        teamMembers.map((member) =>
+          participantService.updateParticipantScore(
+            member.id,
+            categoryKey,
+            changeAmount,
+            user?.uid,
+            `Team scoring for ${teamName}`
+          )
+        )
+      );
+
+      const cat =
+        scoringCategories.positive?.[categoryKey] ||
+        scoringCategories.negative?.[categoryKey] ||
+        {};
+      const catName = cat.name || categoryKey;
+      const isPositive = changeAmount > 0;
+      pushToast(
+        `Team ${teamName} ${isPositive ? "earned" : "lost"} ${Math.abs(
+          changeAmount
+        )} pts each — ${catName}`
+      );
+    } catch (err) {
+      console.error("Failed to update team score:", err);
+      pushToast("Failed to update team score. Try again.", true);
     }
   };
 
@@ -200,6 +228,11 @@ export default function Scoring({ calculateLevel }) {
     }
   };
 
+  const canApplyDelta = (currentScore, delta) => {
+    const newScore = (currentScore || 0) + delta;
+    return newScore >= scoringScale.min && newScore <= scoringScale.max;
+  };
+
   const ScoreRow = ({
     categoryKey,
     category,
@@ -209,20 +242,17 @@ export default function Scoring({ calculateLevel }) {
   }) => {
     const [inputValue, setInputValue] = useState(currentScore.toString());
 
-    // Update input when currentScore changes
     useEffect(() => {
       setInputValue(currentScore.toString());
     }, [currentScore]);
 
     const handleDecrement = () => {
-      const newValue = currentScore - 1;
       if (canApplyDelta(currentScore, -1)) {
         onScoreChange(categoryKey, -1);
       }
     };
 
     const handleIncrement = () => {
-      const newValue = currentScore + 1;
       if (canApplyDelta(currentScore, 1)) {
         onScoreChange(categoryKey, 1);
       }
@@ -239,7 +269,6 @@ export default function Scoring({ calculateLevel }) {
       if (delta !== 0 && canApplyDelta(currentScore, delta)) {
         onScoreChange(categoryKey, delta);
       } else {
-        // Reset to current value if invalid
         setInputValue(currentScore.toString());
       }
     };
@@ -262,55 +291,51 @@ export default function Scoring({ calculateLevel }) {
       defaultPoints > 0 ? `+${defaultPoints}` : `${defaultPoints}`;
 
     return (
-      <div className="p-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
+      <div className="p-3 sm:p-4 bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
         <div className="font-semibold text-sm text-gray-900 mb-3">
           {category?.name || categoryKey}
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Decrement Button */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={handleDecrement}
             disabled={!canApplyDelta(currentScore, -1)}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold transition-all ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-bold transition-all ${
               canApplyDelta(currentScore, -1)
                 ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
                 : "bg-gray-50 text-gray-300 cursor-not-allowed"
             }`}
             aria-label="decrease"
           >
-            <Minus className="w-4 h-4" />
+            <Minus className="w-3 h-3 sm:w-4 sm:h-4" />
           </button>
 
-          {/* Number Input */}
           <input
             type="number"
             value={inputValue}
             onChange={handleInputChange}
             onBlur={handleInputBlur}
             onKeyPress={handleInputKeyPress}
-            className="w-16 h-9 text-center font-bold text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-14 sm:w-16 h-8 sm:h-9 text-center font-bold text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
           />
 
-          {/* Increment Button */}
           <button
             onClick={handleIncrement}
             disabled={!canApplyDelta(currentScore, 1)}
-            className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold transition-all ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-bold transition-all ${
               canApplyDelta(currentScore, 1)
                 ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
                 : "bg-gray-50 text-gray-300 cursor-not-allowed"
             }`}
             aria-label="increase"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
           </button>
 
-          {/* Quick Add Button */}
           <button
             onClick={handleQuickAdd}
             disabled={!canApplyDelta(currentScore, defaultPoints)}
-            className={`flex-1 h-9 px-3 rounded-lg font-medium text-sm transition-all ${
+            className={`flex-1 h-8 sm:h-9 px-2 sm:px-3 rounded-lg font-medium text-xs sm:text-sm transition-all ${
               canApplyDelta(currentScore, defaultPoints)
                 ? isPositive
                   ? "bg-green-500 hover:bg-green-600 text-white"
@@ -318,7 +343,8 @@ export default function Scoring({ calculateLevel }) {
                 : "bg-gray-100 text-gray-400 cursor-not-allowed"
             }`}
           >
-            {quickAddLabel} Quick Add
+            <span className="hidden sm:inline">{quickAddLabel} Quick Add</span>
+            <span className="sm:hidden">{quickAddLabel}</span>
           </button>
         </div>
       </div>

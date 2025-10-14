@@ -90,6 +90,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
     }
   };
 
+  // Around line 116, update the createSession call:
   const handleSubmit = async () => {
     try {
       setLoading(true);
@@ -141,9 +142,12 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       };
 
       console.log("Creating session with admin ID:", userProfile.uid);
+
+      // PASS USER DATA AS THIRD PARAMETER
       const newSession = await sessionService.createSession(
         sessionData,
-        userProfile.uid
+        userProfile.uid,
+        userProfile // ADD THIS
       );
 
       console.log("Session created successfully:", newSession);

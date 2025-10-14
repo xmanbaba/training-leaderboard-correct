@@ -46,7 +46,11 @@ const Participants = ({ calculateLevel }) => {
       const unsubscribe = participantService.subscribeToSessionParticipants(
         currentSession.id,
         (updatedParticipants) => {
-          setParticipants(updatedParticipants);
+          // FILTER OUT ADMINS
+          const participantsOnly = updatedParticipants.filter(
+            (p) => p.role !== "sessionAdmin" && p.role !== "orgAdmin"
+          );
+          setParticipants(participantsOnly);
           setLoading(false);
         }
       );
@@ -65,12 +69,18 @@ const Participants = ({ calculateLevel }) => {
   // Calculate team scores
   const teamScores = teams.map((teamName) => {
     const teamMembers = participants.filter((p) => p.team === teamName);
-    const totalScore = teamMembers.reduce((sum, p) => sum + (p.totalScore || 0), 0);
+    const totalScore = teamMembers.reduce(
+      (sum, p) => sum + (p.totalScore || 0),
+      0
+    );
     return {
       name: teamName,
       totalScore,
       memberCount: teamMembers.length,
-      avgScore: teamMembers.length > 0 ? Math.round(totalScore / teamMembers.length) : 0,
+      avgScore:
+        teamMembers.length > 0
+          ? Math.round(totalScore / teamMembers.length)
+          : 0,
     };
   });
 
@@ -635,13 +645,16 @@ const Participants = ({ calculateLevel }) => {
       <CreateTeamModal
         isOpen={showCreateTeamModal}
         onClose={() => setShowCreateTeamModal(false)}
-  sessionId={currentSession?.id}
-  participants={participants}
-  onTeamCreated={() => {
-    participantService.subscribeToSessionParticipants(currentSession.id, setParticipants);
-  }}
+        sessionId={currentSession?.id}
+        participants={participants}
+        onTeamCreated={() => {
+          participantService.subscribeToSessionParticipants(
+            currentSession.id,
+            setParticipants
+          );
+        }}
       />
-</div>
+    </div>
   );
 };
 

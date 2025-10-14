@@ -112,6 +112,7 @@ const SessionSelector = () => {
   };
 
   const handleSessionClick = (sessionId) => {
+    console.log("Clicking session:", sessionId);
     navigate(`/session/${sessionId}/dashboard`);
   };
 

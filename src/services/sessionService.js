@@ -27,7 +27,8 @@ export class SessionService {
   }
 
   // Create new session AND add creator as sessionAdmin participant
-  async createSession(sessionData, adminId) {
+  // Update the createSession method to accept userData parameter:
+  async createSession(sessionData, adminId, userData = null) {
     try {
       const joinCode = nanoid(8).toUpperCase();
 
@@ -70,13 +71,20 @@ export class SessionService {
       const docRef = await addDoc(collection(db, this.collection), session);
       const sessionId = docRef.id;
 
-      // CRITICAL: Create sessionParticipant record for the admin
+      // CRITICAL: Create sessionParticipant record for the admin WITH USER DATA
       const participantId = getSessionParticipantId(sessionId, adminId);
       const participantData = schemas.sessionParticipant(
         sessionId,
         adminId,
         "sessionAdmin"
       );
+
+      // ADD USER DATA IF PROVIDED
+      if (userData) {
+        participantData.name =
+          userData.displayName || userData.email || "Admin";
+        participantData.email = userData.email || "";
+      }
 
       await setDoc(
         doc(db, collections.SESSION_PARTICIPANTS, participantId),
@@ -86,6 +94,7 @@ export class SessionService {
       console.log("Created session and admin participant:", {
         sessionId,
         participantId,
+        userData,
       });
 
       return { id: sessionId, ...session, joinCode };
@@ -178,12 +187,14 @@ export class SessionService {
   // Soft delete session
   async deleteSession(sessionId) {
     try {
+      console.log("Deleting session:", sessionId);
       const sessionRef = doc(db, this.collection, sessionId);
       await updateDoc(sessionRef, {
         status: "deleted",
         deletedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      console.log("Session deleted successfully:", sessionId);
       return true;
     } catch (error) {
       console.error("Error deleting session:", error);

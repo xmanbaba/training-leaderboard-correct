@@ -32,7 +32,7 @@ import { ParticipantService } from "../services/participantService";
 
 const Settings = () => {
   const navigate = useNavigate();
-  const { currentSession, refreshCurrentSession } = useSession();
+  const { currentSession, refreshCurrentSession, clearSession, loadUserSessions } = useSession();
   const [hasChanges, setHasChanges] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,22 +46,29 @@ const Settings = () => {
     useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
 
-  const handleDeleteSession = async () => {
-    try {
-      setDeletingSession(true);
+ const handleDeleteSession = async () => {
+  try {
+    setDeletingSession(true);
 
-      await sessionService.deleteSession(currentSession.id);
-
-      // Navigate away after deletion
-      navigate("/sessions");
-    } catch (error) {
-      console.error("Error deleting session:", error);
-      alert("Failed to delete session");
-    } finally {
-      setDeletingSession(false);
-      setShowDeleteSessionConfirm(false);
-    }
-  };
+    // Delete the session
+    await sessionService.deleteSession(currentSession.id);
+    
+    // Clear from context
+    clearSession();
+    
+    // Force reload sessions to filter out deleted
+    await loadUserSessions();
+    
+    // Navigate away
+    navigate("/sessions", { replace: true });
+  } catch (error) {
+    console.error("Error deleting session:", error);
+    alert("Failed to delete session: " + error.message);
+  } finally {
+    setDeletingSession(false);
+    setShowDeleteSessionConfirm(false);
+  }
+};
 
   const [formData, setFormData] = useState({
     trainingName: "",

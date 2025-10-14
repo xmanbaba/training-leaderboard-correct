@@ -79,26 +79,42 @@ export const SessionProvider = ({ children }) => {
 
       const q = query(
         collection(db, collections.SESSION_PARTICIPANTS),
-        where("userId", "==", user.uid)
+        where("userId", "==", user.uid),
+        where("isActive", "==", true)
       );
 
       const participantSnap = await getDocs(q);
 
       if (participantSnap.empty) {
         setSessions([]);
+        setCurrentSession(null);
         setLoading(false);
         return;
       }
+
+      console.log(`Found ${participantSnap.size} session participant records`);
 
       // Get session details and build roles object
       const sessionPromises = participantSnap.docs.map(
         async (participantDoc) => {
           const participantData = participantDoc.data();
+          console.log("Participant data:", participantData);
+
           const sessionDoc = await getDoc(
             doc(db, collections.TRAINING_SESSIONS, participantData.sessionId)
           );
 
           if (sessionDoc.exists()) {
+            const sessionData = sessionDoc.data();
+
+            // CRITICAL: Filter out deleted sessions
+            if (sessionData.status === "deleted") {
+              console.log(`Filtering out deleted session: ${sessionDoc.id}`);
+              return null;
+            }
+
+            console.log("Found session:", sessionDoc.id, sessionData.name);
+
             const roles = {
               sessionAdmin: participantData.role === "sessionAdmin",
               participant: participantData.role === "participant",
@@ -106,18 +122,31 @@ export const SessionProvider = ({ children }) => {
             };
 
             return {
-              ...sessionDoc.data(),
+              ...sessionData,
               id: sessionDoc.id,
               roles,
               participantData,
             };
           }
+          console.warn("Session not found:", participantData.sessionId);
           return null;
         }
       );
 
       const sessionsList = (await Promise.all(sessionPromises)).filter(Boolean);
+      console.log("Loaded sessions:", sessionsList);
       setSessions(sessionsList);
+
+      // If current session is deleted or doesn't exist, clear it
+      if (currentSession) {
+        const currentStillExists = sessionsList.find(
+          (s) => s.id === currentSession.id
+        );
+        if (!currentStillExists) {
+          console.log("Current session no longer exists, clearing");
+          setCurrentSession(null);
+        }
+      }
 
       // Auto-select most recent session if none selected
       if (!currentSession && sessionsList.length > 0) {

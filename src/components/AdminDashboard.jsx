@@ -36,7 +36,17 @@ const AdminDashboard = () => {
             "Admin Dashboard - Loaded participants:",
             updatedParticipants.length
           );
-          setParticipants(updatedParticipants);
+
+          // FILTER OUT ADMINS - only show actual participants
+          const participantsOnly = updatedParticipants.filter(
+            (p) => p.role !== "sessionAdmin" && p.role !== "orgAdmin"
+          );
+
+          console.log(
+            "Admin Dashboard - Participants (no admins):",
+            participantsOnly.length
+          );
+          setParticipants(participantsOnly);
           setLoading(false);
         }
       );
@@ -48,9 +58,11 @@ const AdminDashboard = () => {
   }, [currentSession?.id]);
 
   // Real-time activities subscription
+  // Real-time activities subscription
   useEffect(() => {
-    if (participantService.subscribeToRecentActivities && currentSession?.id) {
-      const unsubscribe = participantService.subscribeToRecentActivities(
+    if (currentSession?.id) {
+      // CHANGE FROM subscribeToRecentActivities TO subscribeToSessionActivities
+      const unsubscribe = participantService.subscribeToSessionActivities(
         currentSession.id,
         (activities) => {
           console.log(

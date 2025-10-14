@@ -13,6 +13,8 @@ import {
   UserCircle,
   LogOut,
   LogIn,
+  Search,
+  X,
 } from "lucide-react";
 import {
   collection,
@@ -33,6 +35,8 @@ const SessionSelector = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinCode, setJoinCode] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOrder, setSortOrder] = useState("desc"); // 'desc' = newest first, 'asc' = oldest first
 
   useEffect(() => {
     if (user?.uid) {
@@ -78,6 +82,13 @@ const SessionSelector = () => {
 
             if (sessionDoc.exists()) {
               const sessionData = sessionDoc.data();
+
+              // FILTER OUT DELETED SESSIONS
+              if (sessionData.status === "deleted") {
+                console.log(`Filtering out deleted session: ${sessionDoc.id}`);
+                return null;
+              }
+
               console.log("Found session:", sessionDoc.id, sessionData.name);
 
               return {
@@ -118,10 +129,10 @@ const SessionSelector = () => {
 
   const handleSessionCreated = async (newSession) => {
     console.log("Session created callback received:", newSession);
-    
+
     // Close modal first
     setShowCreateModal(false);
-    
+
     // Add the new session to the local state immediately for better UX
     const enrichedSession = {
       ...newSession,
@@ -129,16 +140,16 @@ const SessionSelector = () => {
       isSessionAdmin: true,
       isParticipant: false,
     };
-    
-    setSessions(prev => [enrichedSession, ...prev]);
-    
+
+    setSessions((prev) => [enrichedSession, ...prev]);
+
     // Navigate immediately - don't wait for reload
     console.log("Navigating to new session:", newSession.id);
-    navigate(`/session/${newSession.id}/dashboard`, { 
+    navigate(`/session/${newSession.id}/dashboard`, {
       replace: true,
-      state: { isNewSession: true }
+      state: { isNewSession: true },
     });
-    
+
     // Reload sessions in the background to ensure sync
     setTimeout(() => {
       loadUserSessions();
@@ -150,6 +161,24 @@ const SessionSelector = () => {
       navigate(`/join/${joinCode.trim().toUpperCase()}`);
     }
   };
+
+  // Filter and sort sessions
+  const filteredAndSortedSessions = sessions
+    .filter((session) => {
+      if (!searchTerm) return true;
+      const search = searchTerm.toLowerCase();
+      return (
+        session.name?.toLowerCase().includes(search) ||
+        session.description?.toLowerCase().includes(search) ||
+        session.cohort?.toLowerCase().includes(search) ||
+        session.location?.toLowerCase().includes(search)
+      );
+    })
+    .sort((a, b) => {
+      const dateA = a.createdAt?.toMillis?.() || 0;
+      const dateB = b.createdAt?.toMillis?.() || 0;
+      return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+    });
 
   if (loading) {
     return (
@@ -262,7 +291,7 @@ const SessionSelector = () => {
           <>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 md:mb-6 space-y-3 sm:space-y-0">
               <h2 className="text-lg md:text-xl font-bold text-gray-900">
-                Your Sessions ({sessions.length})
+                Your Sessions ({filteredAndSortedSessions.length})
               </h2>
               <div className="flex gap-3 w-full sm:w-auto">
                 <button
@@ -275,8 +304,65 @@ const SessionSelector = () => {
               </div>
             </div>
 
+            {/* Search and Sort Controls */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 md:mb-6">
+              <div className="flex flex-col lg:flex-row gap-3">
+                {/* Search Bar */}
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search sessions..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Sort Controls */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 whitespace-nowrap">
+                    Sort by:
+                  </span>
+                  <button
+                    onClick={() =>
+                      setSortOrder(sortOrder === "desc" ? "asc" : "desc")
+                    }
+                    className="inline-flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
+                  >
+                    <span>
+                      {sortOrder === "desc" ? "Newest First" : "Oldest First"}
+                    </span>
+                    <svg
+                      className={`h-4 w-4 transition-transform ${
+                        sortOrder === "asc" ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-              {sessions.map((session) => (
+              {filteredAndSortedSessions.map((session) => (
                 <div
                   key={session.id}
                   onClick={() => handleSessionClick(session.id)}
@@ -370,6 +456,25 @@ const SessionSelector = () => {
                 </div>
               ))}
             </div>
+
+            {/* No Results Message */}
+            {filteredAndSortedSessions.length === 0 && searchTerm && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center mt-6">
+                <Search className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  No sessions found
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  No sessions match "{searchTerm}"
+                </p>
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
           </>
         )}
 

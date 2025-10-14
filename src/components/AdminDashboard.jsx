@@ -70,7 +70,8 @@ const AdminDashboard = () => {
             activities.length
           );
           setRecentActivities(activities);
-        }
+        },
+        100
       );
       return () => unsubscribe();
     } else {

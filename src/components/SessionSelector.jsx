@@ -62,7 +62,7 @@ const SessionSelector = () => {
         console.log("No session participants found for user:", user.uid);
         setSessions([]);
         setLoading(false);
-        return;
+        return [];
       }
 
       console.log(`Found ${participantSnap.size} session participant records`);
@@ -70,7 +70,6 @@ const SessionSelector = () => {
       const sessionPromises = participantSnap.docs.map(
         async (participantDoc) => {
           const participantData = participantDoc.data();
-          console.log("Participant data:", participantData);
 
           try {
             const sessionRef = doc(
@@ -89,8 +88,6 @@ const SessionSelector = () => {
                 return null;
               }
 
-              console.log("Found session:", sessionDoc.id, sessionData.name);
-
               return {
                 ...sessionData,
                 id: sessionDoc.id,
@@ -98,8 +95,6 @@ const SessionSelector = () => {
                 isSessionAdmin: participantData.role === "sessionAdmin",
                 isParticipant: participantData.role === "participant",
               };
-            } else {
-              console.warn("Session not found:", participantData.sessionId);
             }
           } catch (error) {
             console.error(
@@ -115,8 +110,10 @@ const SessionSelector = () => {
       const sessionsData = (await Promise.all(sessionPromises)).filter(Boolean);
       console.log("Loaded sessions:", sessionsData);
       setSessions(sessionsData);
+      return sessionsData;
     } catch (error) {
       console.error("Error loading sessions:", error);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -127,33 +124,30 @@ const SessionSelector = () => {
     navigate(`/session/${sessionId}/dashboard`);
   };
 
+  // In SessionSelector.jsx - Update handleSessionCreated
+
   const handleSessionCreated = async (newSession) => {
     console.log("Session created callback received:", newSession);
 
-    // Close modal first
-    setShowCreateModal(false);
+    try {
+      // Close modal first
+      setShowCreateModal(false);
 
-    // Add the new session to the local state immediately for better UX
-    const enrichedSession = {
-      ...newSession,
-      role: "sessionAdmin",
-      isSessionAdmin: true,
-      isParticipant: false,
-    };
+      // CRITICAL: Reload sessions first and wait for it to complete
+      await loadUserSessions();
 
-    setSessions((prev) => [enrichedSession, ...prev]);
-
-    // Navigate immediately - don't wait for reload
-    console.log("Navigating to new session:", newSession.id);
-    navigate(`/session/${newSession.id}/dashboard`, {
-      replace: true,
-      state: { isNewSession: true },
-    });
-
-    // Reload sessions in the background to ensure sync
-    setTimeout(() => {
-      loadUserSessions();
-    }, 500);
+      // Now navigate to the new session
+      console.log("Navigating to new session:", newSession.id);
+      navigate(`/session/${newSession.id}/dashboard`, {
+        replace: true,
+        state: { isNewSession: true },
+      });
+    } catch (error) {
+      console.error("Error after session creation:", error);
+      alert(
+        "Session created but navigation failed. Please select it from the list."
+      );
+    }
   };
 
   const handleJoinWithCode = () => {

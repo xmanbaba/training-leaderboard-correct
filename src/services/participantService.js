@@ -298,7 +298,7 @@ export class ParticipantService {
   /**
    * Get session activities for dashboard
    */
-  async getSessionActivities(sessionId, max = 50) {
+  async getSessionActivities(sessionId, max = 100) {
     try {
       const q = query(
         collection(db, this.activitiesCollection),

@@ -405,7 +405,7 @@ const SessionLayout = () => {
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors text-sm font-medium"
               >
                 <Share2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Share</span>
+                <span className="hidden sm:inline">Share Session</span>
               </button>
 
               {/* User Menu */}

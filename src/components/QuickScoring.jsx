@@ -468,7 +468,7 @@ export default function QuickScoring({ calculateLevel }) {
             <div>
               <h1 className="text-2xl font-extrabold text-gray-900">Scoring</h1>
               <p className="text-sm text-gray-600">
-                Award points quickly — tap to open scoring panel
+                Award points easily — tap to open scoring panel
               </p>
             </div>
           </div>

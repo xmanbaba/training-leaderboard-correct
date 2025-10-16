@@ -1,4 +1,4 @@
-// QuickScoring.jsx - Enhanced with better UI, team scoring, and responsive design
+// QuickScoring.jsx - Enhanced with notes, activity logs, and proper team scoring
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   User,
@@ -17,6 +17,8 @@ import {
   Copy,
   Check,
   ChevronRight,
+  Clock,
+  FileText,
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
@@ -33,13 +35,18 @@ export default function QuickScoring({ calculateLevel }) {
 
   const [participants, setParticipants] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [teamScores, setTeamScores] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [teamActivities, setTeamActivities] = useState([]);
+  const [scoreNote, setScoreNote] = useState("");
+  const [showNoteField, setShowNoteField] = useState(false);
   const backdropRef = useRef(null);
 
-  // New state
+  // Existing state
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [scoringMode, setScoringMode] = useState("individual");
@@ -47,7 +54,7 @@ export default function QuickScoring({ calculateLevel }) {
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // Load participants and teams
+  // Load participants, teams, and team scores
   useEffect(() => {
     if (currentSession?.id) {
       setLoading(true);
@@ -59,6 +66,11 @@ export default function QuickScoring({ calculateLevel }) {
             currentSession.id
           );
           setTeams(teamData);
+          
+          // Load team scores from session
+          const scores = await sessionService.getTeamScores(currentSession.id);
+          setTeamScores(scores);
+          
           setLoading(false);
         }
       );
@@ -66,9 +78,30 @@ export default function QuickScoring({ calculateLevel }) {
     } else {
       setParticipants([]);
       setTeams([]);
+      setTeamScores({});
       setLoading(false);
     }
   }, [currentSession?.id]);
+
+  // Load activities when participant is selected
+  useEffect(() => {
+    if (selectedParticipantId && currentSession?.id) {
+      participantService
+        .getParticipantActivities(selectedParticipantId, 20)
+        .then(setActivities)
+        .catch(console.error);
+    }
+  }, [selectedParticipantId, currentSession?.id]);
+
+  // Load team activities when team is selected
+  useEffect(() => {
+    if (selectedTeam && currentSession?.id) {
+      sessionService
+        .getTeamActivities(currentSession.id, selectedTeam, 20)
+        .then(setTeamActivities)
+        .catch(console.error);
+    }
+  }, [selectedTeam, currentSession?.id]);
 
   const scoringScale = currentSession?.scoringScale || DEFAULT_SCALE;
   const scoringCategories = currentSession?.scoringCategories || {
@@ -102,9 +135,14 @@ export default function QuickScoring({ calculateLevel }) {
     return list.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
   }, [participants, searchQuery, departmentFilter]);
 
+  // Updated to use teamScores from session
   const sortedTeams = useMemo(() => {
-    return [...teams].sort((a, b) => b.totalScore - a.totalScore);
-  }, [teams]);
+    return teams.map(team => ({
+      ...team,
+      totalScore: teamScores[team.name]?.totalScore || 0,
+      scores: teamScores[team.name]?.scores || {}
+    })).sort((a, b) => b.totalScore - a.totalScore);
+  }, [teams, teamScores]);
 
   const totalPoints = useMemo(
     () => participants.reduce((s, p) => s + (p.totalScore || 0), 0),
@@ -115,6 +153,16 @@ export default function QuickScoring({ calculateLevel }) {
     () => participants.find((p) => p.id === selectedParticipantId) || null,
     [participants, selectedParticipantId]
   );
+
+  const selectedTeamData = useMemo(() => {
+    if (!selectedTeam) return null;
+    return {
+      name: selectedTeam,
+      memberCount: participants.filter(p => p.team === selectedTeam).length,
+      totalScore: teamScores[selectedTeam]?.totalScore || 0,
+      scores: teamScores[selectedTeam]?.scores || {}
+    };
+  }, [selectedTeam, participants, teamScores]);
 
   const pushToast = (message, isError = false, duration = 3500) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -132,12 +180,14 @@ export default function QuickScoring({ calculateLevel }) {
     note = ""
   ) => {
     try {
+      const finalNote = note || scoreNote || "Manual scoring via Quick Scoring";
+      
       await participantService.updateParticipantScore(
         participantId,
         categoryKey,
         changeAmount,
         user?.uid,
-        note || "Manual scoring via Quick Scoring"
+        finalNote
       );
 
       const p = participants.find((x) => x.id === participantId);
@@ -152,6 +202,19 @@ export default function QuickScoring({ calculateLevel }) {
           isPositive ? "earned" : "lost"
         } ${Math.abs(changeAmount)} pts — ${catName}`
       );
+
+      // Refresh activities
+      if (selectedParticipantId === participantId) {
+        const updatedActivities = await participantService.getParticipantActivities(
+          participantId,
+          20
+        );
+        setActivities(updatedActivities);
+      }
+
+      // Clear note after successful score
+      setScoreNote("");
+      setShowNoteField(false);
     } catch (err) {
       console.error("Failed to update score:", err);
       pushToast("Failed to update score. Try again.", true);
@@ -160,18 +223,15 @@ export default function QuickScoring({ calculateLevel }) {
 
   const handleTeamScoreChange = async (teamName, categoryKey, changeAmount) => {
     try {
-      const teamMembers = participants.filter((p) => p.team === teamName);
-
-      await Promise.all(
-        teamMembers.map((member) =>
-          participantService.updateParticipantScore(
-            member.id,
-            categoryKey,
-            changeAmount,
-            user?.uid,
-            `Team scoring for ${teamName}`
-          )
-        )
+      const finalNote = scoreNote || "Team scoring via Quick Scoring";
+      
+      await sessionService.updateTeamScore(
+        currentSession.id,
+        teamName,
+        categoryKey,
+        changeAmount,
+        user?.uid,
+        finalNote
       );
 
       const cat =
@@ -180,11 +240,29 @@ export default function QuickScoring({ calculateLevel }) {
         {};
       const catName = cat.name || categoryKey;
       const isPositive = changeAmount > 0;
+      
       pushToast(
         `Team ${teamName} ${isPositive ? "earned" : "lost"} ${Math.abs(
           changeAmount
-        )} pts each — ${catName}`
+        )} pts — ${catName}`
       );
+
+      // Refresh team scores and activities
+      const scores = await sessionService.getTeamScores(currentSession.id);
+      setTeamScores(scores);
+
+      if (selectedTeam === teamName) {
+        const updatedActivities = await sessionService.getTeamActivities(
+          currentSession.id,
+          teamName,
+          20
+        );
+        setTeamActivities(updatedActivities);
+      }
+
+      // Clear note after successful score
+      setScoreNote("");
+      setShowNoteField(false);
     } catch (err) {
       console.error("Failed to update team score:", err);
       pushToast("Failed to update team score. Try again.", true);
@@ -225,6 +303,8 @@ export default function QuickScoring({ calculateLevel }) {
     if (e.target === backdropRef.current) {
       setSelectedParticipantId(null);
       setSelectedTeam(null);
+      setScoreNote("");
+      setShowNoteField(false);
     }
   };
 
@@ -351,6 +431,72 @@ export default function QuickScoring({ calculateLevel }) {
     );
   };
 
+  const ActivityLog = ({ activities, isTeam = false }) => {
+    if (!activities || activities.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+          <p className="text-sm">No activity yet</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        {activities.map((activity) => {
+          const timestamp = activity.timestamp?.toDate?.();
+          const isPositive = (activity.points || 0) > 0;
+          
+          return (
+            <div
+              key={activity.id}
+              className="p-3 bg-gray-50 rounded-lg border border-gray-100"
+            >
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      isPositive
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}
+                  >
+                    {isPositive ? "+" : ""}
+                    {activity.points || 0}
+                  </div>
+                  <span className="text-sm font-medium text-gray-900">
+                    {activity.category || "Score change"}
+                  </span>
+                </div>
+                {timestamp && (
+                  <span className="text-xs text-gray-500">
+                    {timestamp.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                )}
+              </div>
+              {activity.reason && (
+                <div className="flex items-start gap-2 mt-2 pl-8">
+                  <FileText className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-600 italic">
+                    {activity.reason}
+                  </p>
+                </div>
+              )}
+              {timestamp && (
+                <div className="text-xs text-gray-400 mt-1 pl-8">
+                  {timestamp.toLocaleDateString()}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const ParticipantListItem = ({ p, index }) => {
     const rank = index + 1;
     const levelInfo = (typeof calculateLevel === "function" &&
@@ -458,7 +604,7 @@ export default function QuickScoring({ calculateLevel }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 lg:p-6">
-      {/* Header */}
+      {/* Header - keeping existing code */}
       <div className="max-w-7xl mx-auto mb-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-4">
@@ -468,7 +614,7 @@ export default function QuickScoring({ calculateLevel }) {
             <div>
               <h1 className="text-2xl font-extrabold text-gray-900">Scoring</h1>
               <p className="text-sm text-gray-600">
-                Award points easily — tap to open scoring panel
+                Award points quickly — tap to open scoring panel
               </p>
             </div>
           </div>
@@ -504,7 +650,7 @@ export default function QuickScoring({ calculateLevel }) {
           </div>
         </div>
 
-        {/* Mode Toggle - More Prominent */}
+        {/* Mode Toggle */}
         <div className="mt-6 bg-white rounded-2xl p-2 border border-gray-200 inline-flex shadow-sm">
           <button
             onClick={() => setScoringMode("individual")}
@@ -534,7 +680,7 @@ export default function QuickScoring({ calculateLevel }) {
           </button>
         </div>
 
-        {/* Search + Filter (only for individual mode) */}
+        {/* Search + Filter */}
         {scoringMode === "individual" && (
           <div className="mt-4 flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1 sm:max-w-xs">
@@ -655,11 +801,42 @@ export default function QuickScoring({ calculateLevel }) {
               </div>
 
               <button
-                onClick={() => setSelectedParticipantId(null)}
+                onClick={() => {
+                  setSelectedParticipantId(null);
+                  setScoreNote("");
+                  setShowNoteField(false);
+                }}
                 className="px-3 py-2 bg-slate-100 rounded-md text-sm flex items-center gap-2"
               >
                 <X className="w-4 h-4" /> Close
               </button>
+            </div>
+
+            {/* Note Field */}
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <button
+                onClick={() => setShowNoteField(!showNoteField)}
+                className="w-full flex items-center justify-between text-sm font-medium text-blue-900 mb-2"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  {showNoteField ? "Hide Note" : "Add Note (Optional)"}
+                </span>
+                <ChevronRight
+                  className={`w-4 h-4 transition-transform ${
+                    showNoteField ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {showNoteField && (
+                <textarea
+                  value={scoreNote}
+                  onChange={(e) => setScoreNote(e.target.value)}
+                  placeholder="Why are you awarding/deducting points?"
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  rows="3"
+                />
+              )}
             </div>
 
             <div className="space-y-6">
@@ -689,12 +866,11 @@ export default function QuickScoring({ calculateLevel }) {
                           0
                         }
                         isPositive={true}
-                        onScoreChange={(catKey, delta, note) =>
+                        onScoreChange={(catKey, delta) =>
                           handleScoreChange(
                             selectedParticipant.id,
                             catKey,
-                            delta,
-                            note
+                            delta
                           )
                         }
                       />
@@ -728,12 +904,11 @@ export default function QuickScoring({ calculateLevel }) {
                           0
                         }
                         isPositive={false}
-                        onScoreChange={(catKey, delta, note) =>
+                        onScoreChange={(catKey, delta) =>
                           handleScoreChange(
                             selectedParticipant.id,
                             catKey,
-                            delta,
-                            note
+                            delta
                           )
                         }
                       />
@@ -741,13 +916,22 @@ export default function QuickScoring({ calculateLevel }) {
                   )}
                 </div>
               </div>
+
+              {/* Activity Log */}
+              <div className="border-t border-gray-200 pt-6">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Activity Log
+                </h4>
+                <ActivityLog activities={activities} />
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Team Scoring Drawer - Team scores only, not distributed */}
-      {selectedTeam && (
+      {/* Team Scoring Drawer */}
+      {selectedTeamData && (
         <div
           ref={backdropRef}
           onMouseDown={onBackdropClick}
@@ -765,29 +949,26 @@ export default function QuickScoring({ calculateLevel }) {
                     <Users className="w-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold">{selectedTeam}</h3>
+                    <h3 className="text-lg font-bold">{selectedTeamData.name}</h3>
                     <div className="text-xs text-slate-500">
-                      {
-                        participants.filter((p) => p.team === selectedTeam)
-                          .length
-                      }{" "}
-                      members
+                      {selectedTeamData.memberCount} members
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-3">
                   <div className="text-sm font-bold px-3 py-1 rounded-full bg-purple-50 text-purple-800 inline-block">
-                    Total:{" "}
-                    {teams.find((t) => t.name === selectedTeam)?.totalScore ||
-                      0}{" "}
-                    pts
+                    Total: {selectedTeamData.totalScore > 0 ? '+' : ''}{selectedTeamData.totalScore} pts
                   </div>
                 </div>
               </div>
 
               <button
-                onClick={() => setSelectedTeam(null)}
+                onClick={() => {
+                  setSelectedTeam(null);
+                  setScoreNote("");
+                  setShowNoteField(false);
+                }}
                 className="px-3 py-2 bg-slate-100 rounded-md text-sm flex items-center gap-2"
               >
                 <X className="w-4 h-4" /> Close
@@ -797,8 +978,35 @@ export default function QuickScoring({ calculateLevel }) {
             <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4">
               <p className="text-sm text-purple-900">
                 <strong>Team Scoring:</strong> Points are added to the team's
-                total score, not individual members.
+                total score only. Individual member scores remain unchanged.
               </p>
+            </div>
+
+            {/* Note Field */}
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <button
+                onClick={() => setShowNoteField(!showNoteField)}
+                className="w-full flex items-center justify-between text-sm font-medium text-blue-900 mb-2"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  {showNoteField ? "Hide Note" : "Add Note (Optional)"}
+                </span>
+                <ChevronRight
+                  className={`w-4 h-4 transition-transform ${
+                    showNoteField ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {showNoteField && (
+                <textarea
+                  value={scoreNote}
+                  onChange={(e) => setScoreNote(e.target.value)}
+                  placeholder="Why are you awarding/deducting points for this team?"
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  rows="3"
+                />
+              )}
             </div>
 
             <div className="space-y-6">
@@ -815,16 +1023,11 @@ export default function QuickScoring({ calculateLevel }) {
                         key={key}
                         categoryKey={key}
                         category={cat}
-                        currentScore={0}
+                        currentScore={selectedTeamData.scores[key] || 0}
                         isPositive={true}
-                        onScoreChange={(catKey, delta, note) => {
-                          // Team scoring - add to team total only
-                          pushToast(
-                            `Team scoring functionality: ${selectedTeam} would get ${delta} points in ${
-                              cat.name
-                            }. Note: ${note || "None"}`
-                          );
-                        }}
+                        onScoreChange={(catKey, delta) =>
+                          handleTeamScoreChange(selectedTeamData.name, catKey, delta)
+                        }
                       />
                     )
                   )}
@@ -844,61 +1047,65 @@ export default function QuickScoring({ calculateLevel }) {
                         key={key}
                         categoryKey={key}
                         category={cat}
-                        currentScore={0}
+                        currentScore={selectedTeamData.scores[key] || 0}
                         isPositive={false}
-                        onScoreChange={(catKey, delta, note) => {
-                          // Team scoring - subtract from team total only
-                          pushToast(
-                            `Team scoring functionality: ${selectedTeam} would lose ${Math.abs(
-                              delta
-                            )} points in ${cat.name}. Note: ${note || "None"}`
-                          );
-                        }}
+                        onScoreChange={(catKey, delta) =>
+                          handleTeamScoreChange(selectedTeamData.name, catKey, delta)
+                        }
                       />
                     )
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Team Members List */}
-            <div className="mt-6 border-t border-gray-200 pt-6">
-              <h4 className="font-semibold text-gray-900 mb-3">Team Members</h4>
-              <div className="space-y-2">
-                {participants
-                  .filter((p) => p.team === selectedTeam)
-                  .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-                  .map((member) => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-600 to-indigo-700 flex items-center justify-center text-white text-xs font-bold">
-                          {member.name.charAt(0)}
+              {/* Team Activity Log */}
+              <div className="border-t border-gray-200 pt-6">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Team Activity Log
+                </h4>
+                <ActivityLog activities={teamActivities} isTeam={true} />
+              </div>
+
+              {/* Team Members List */}
+              <div className="border-t border-gray-200 pt-6">
+                <h4 className="font-semibold text-gray-900 mb-3">Team Members</h4>
+                <div className="space-y-2">
+                  {participants
+                    .filter((p) => p.team === selectedTeamData.name)
+                    .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+                    .map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-600 to-indigo-700 flex items-center justify-center text-white text-xs font-bold">
+                            {member.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {member.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {member.department || "No dept"}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {member.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {member.department || "No dept"}
-                          </div>
+                        <div className="text-sm font-bold text-gray-900">
+                          {member.totalScore > 0 ? "+" : ""}
+                          {member.totalScore || 0}
                         </div>
                       </div>
-                      <div className="text-sm font-bold text-gray-900">
-                        {member.totalScore > 0 ? "+" : ""}
-                        {member.totalScore || 0}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Share Modal */}
+      {/* Share Modal - keeping existing */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">

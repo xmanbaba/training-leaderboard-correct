@@ -24,6 +24,7 @@ import {
 export class SessionService {
   constructor() {
     this.collection = collections.TRAINING_SESSIONS;
+    this.activitiesCollection = collections.ACTIVITIES;
   }
 
   // Create new session AND add creator as sessionAdmin participant
@@ -348,6 +349,131 @@ export class SessionService {
     } catch (error) {
       console.error("Error cloning session:", error);
       throw new Error("Failed to clone session");
+    }
+  }
+
+  /**
+   * TEAM SCORING METHODS
+   */
+
+  /**
+   * Update team score - stores team scores separately from participant scores
+   */
+  async updateTeamScore(
+    sessionId,
+    teamName,
+    category,
+    changeAmount,
+    trainerId,
+    reason = ""
+  ) {
+    try {
+      const sessionRef = doc(db, this.collection, sessionId);
+      const sessionDoc = await getDoc(sessionRef);
+
+      if (!sessionDoc.exists()) {
+        throw new Error("Session not found");
+      }
+
+      const sessionData = sessionDoc.data();
+      const teamScores = sessionData.teamScores || {};
+
+      // Initialize team if it doesn't exist
+      if (!teamScores[teamName]) {
+        teamScores[teamName] = {
+          totalScore: 0,
+          scores: {},
+        };
+      }
+
+      // Update category score
+      const currentCategoryScore = teamScores[teamName].scores[category] || 0;
+      const newCategoryScore = currentCategoryScore + changeAmount;
+      teamScores[teamName].scores[category] = newCategoryScore;
+
+      // Recalculate total score
+      teamScores[teamName].totalScore = Object.values(
+        teamScores[teamName].scores
+      ).reduce((sum, score) => sum + score, 0);
+
+      // Update session document
+      await updateDoc(sessionRef, {
+        teamScores,
+        updatedAt: serverTimestamp(),
+      });
+
+      // Log activity
+      await addDoc(collection(db, this.activitiesCollection), {
+        sessionId,
+        teamName,
+        type: "team_score_change",
+        description: `${
+          changeAmount > 0 ? "+" : ""
+        }${changeAmount} points in ${category}`,
+        points: changeAmount,
+        category,
+        reason: reason || "Team scoring via Quick Scoring",
+        changedBy: trainerId,
+        timestamp: serverTimestamp(),
+      });
+
+      console.log("Team score updated:", {
+        teamName,
+        category,
+        changeAmount,
+        newTotal: teamScores[teamName].totalScore,
+      });
+
+      return {
+        teamName,
+        category,
+        newCategoryScore,
+        newTotalScore: teamScores[teamName].totalScore,
+        changeAmount,
+      };
+    } catch (error) {
+      console.error("Error updating team score:", error);
+      throw new Error("Failed to update team score");
+    }
+  }
+
+  /**
+   * Get team scores from session
+   */
+  async getTeamScores(sessionId) {
+    try {
+      const sessionRef = doc(db, this.collection, sessionId);
+      const sessionDoc = await getDoc(sessionRef);
+
+      if (!sessionDoc.exists()) {
+        throw new Error("Session not found");
+      }
+
+      return sessionDoc.data().teamScores || {};
+    } catch (error) {
+      console.error("Error fetching team scores:", error);
+      throw new Error("Failed to fetch team scores");
+    }
+  }
+
+  /**
+   * Get team activities
+   */
+  async getTeamActivities(sessionId, teamName, limitCount = 50) {
+    try {
+      const q = query(
+        collection(db, this.activitiesCollection),
+        where("sessionId", "==", sessionId),
+        where("teamName", "==", teamName),
+        orderBy("timestamp", "desc"),
+        limit(limitCount)
+      );
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error("Error fetching team activities:", error);
+      throw new Error("Failed to fetch team activities");
     }
   }
 

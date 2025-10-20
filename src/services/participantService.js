@@ -145,6 +145,7 @@ export class ParticipantService {
         collection(db, this.collection),
         where("sessionId", "==", sessionId),
         where("isActive", "==", true),
+        where("role", "==", "participant"), // Add this line to exclude sessionAdmins
         orderBy("totalScore", "desc")
       );
 
@@ -298,20 +299,24 @@ export class ParticipantService {
   /**
    * Get session activities for dashboard
    */
-  async getSessionActivities(sessionId, max = 100) {
+  async getSessionParticipants(sessionId) {
     try {
       const q = query(
-        collection(db, this.activitiesCollection),
+        collection(db, this.collection),
         where("sessionId", "==", sessionId),
-        orderBy("timestamp", "desc"),
-        limit(max)
+        where("isActive", "==", true),
+        where("role", "==", "participant"), // Add this line to exclude sessionAdmins
+        orderBy("totalScore", "desc")
       );
 
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
     } catch (error) {
-      console.error("Error fetching session activities:", error);
-      throw new Error("Failed to fetch session activities");
+      console.error("Error fetching participants:", error);
+      throw new Error("Failed to fetch participants");
     }
   }
 
@@ -442,7 +447,20 @@ export class ParticipantService {
    */
   async getSessionTeams(sessionId) {
     try {
-      const participants = await this.getSessionParticipants(sessionId);
+      // Only get actual participants, not admins
+      const q = query(
+        collection(db, this.collection),
+        where("sessionId", "==", sessionId),
+        where("isActive", "==", true),
+        where("role", "==", "participant")
+      );
+
+      const querySnapshot = await getDocs(q);
+      const participants = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
       const teams = [
         ...new Set(participants.map((p) => p.team).filter(Boolean)),
       ];
@@ -459,7 +477,6 @@ export class ParticipantService {
       throw new Error("Failed to fetch teams");
     }
   }
-
   /**
    * Assign participant to a team
    */

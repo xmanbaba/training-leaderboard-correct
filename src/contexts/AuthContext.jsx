@@ -19,6 +19,17 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // Check for redirect result first (for Google sign-in)
+    const checkRedirectResult = async () => {
+      try {
+        await authService.getRedirectResult();
+      } catch (err) {
+        console.error("Redirect result error:", err);
+      }
+    };
+    checkRedirectResult();
+
+    // Set up auth state listener
     const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
       try {
         setError(null);
@@ -76,6 +87,56 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Google Sign In
+  const signInWithGoogle = async () => {
+    try {
+      setError(null);
+      setLoading(true);
+
+      const user = await authService.signInWithGoogle();
+      // If null returned, it means redirect was initiated
+      if (user) {
+        return user;
+      }
+    } catch (err) {
+      const errorMessage =
+        err.code === "auth/popup-closed-by-user"
+          ? "Sign-in cancelled. Please try again."
+          : err.message;
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Password Reset
+  const resetPassword = async (email) => {
+    try {
+      setError(null);
+      setLoading(true);
+
+      const result = await authService.sendPasswordResetEmail(email);
+      return result;
+    } catch (err) {
+      let errorMessage = "Failed to send password reset email";
+
+      // Provide user-friendly error messages
+      if (err.code === "auth/user-not-found") {
+        errorMessage = "No account found with this email address";
+      } else if (err.code === "auth/invalid-email") {
+        errorMessage = "Please enter a valid email address";
+      } else if (err.code === "auth/too-many-requests") {
+        errorMessage = "Too many attempts. Please try again later";
+      }
+
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Sign out function
   const signOut = async () => {
     try {
@@ -120,6 +181,8 @@ export const AuthProvider = ({ children }) => {
     // Auth functions
     signUp,
     signIn,
+    signInWithGoogle,
+    resetPassword,
     signOut,
     updateProfile,
 

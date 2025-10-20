@@ -20,6 +20,11 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from "firebase/auth";
 import { db, auth } from "../config/firebase";
 import { collections, roles } from "../config/firestoreSchema";
@@ -57,6 +62,107 @@ export const authService = {
       password
     );
     return userCredential.user;
+  },
+
+  // Google Sign In
+  async signInWithGoogle() {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.addScope("profile");
+      provider.addScope("email");
+
+      // Try popup first (works better on desktop)
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if user document exists
+      const userDoc = await getDoc(doc(db, collections.USERS, user.uid));
+
+      if (!userDoc.exists()) {
+        // Create new user document for first-time Google sign-in
+        await setDoc(doc(db, collections.USERS, user.uid), {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || "",
+          photoURL: user.photoURL || null,
+          role: roles.PARTICIPANT,
+          provider: "google",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Update last login time for existing user
+        await updateDoc(doc(db, collections.USERS, user.uid), {
+          lastLogin: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      return user;
+    } catch (error) {
+      // If popup blocked, fall back to redirect
+      if (error.code === "auth/popup-blocked") {
+        const provider = new GoogleAuthProvider();
+        provider.addScope("profile");
+        provider.addScope("email");
+        await signInWithRedirect(auth, provider);
+        return null; // Will be handled by getRedirectResult
+      }
+      throw error;
+    }
+  },
+
+  // Handle redirect result (for mobile or when popup is blocked)
+  async getRedirectResult() {
+    try {
+      const result = await getRedirectResult(auth);
+      if (result && result.user) {
+        const user = result.user;
+
+        // Check if user document exists
+        const userDoc = await getDoc(doc(db, collections.USERS, user.uid));
+
+        if (!userDoc.exists()) {
+          // Create new user document
+          await setDoc(doc(db, collections.USERS, user.uid), {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || "",
+            photoURL: user.photoURL || null,
+            role: roles.PARTICIPANT,
+            provider: "google",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          // Update last login
+          await updateDoc(doc(db, collections.USERS, user.uid), {
+            lastLogin: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        return user;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting redirect result:", error);
+      throw error;
+    }
+  },
+
+  // Password Reset
+  async sendPasswordResetEmail(email) {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return {
+        success: true,
+        message: "Password reset email sent successfully",
+      };
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+      throw error;
+    }
   },
 
   async signOut() {

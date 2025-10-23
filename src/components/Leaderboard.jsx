@@ -1,4 +1,4 @@
-// src/components/Leaderboard.jsx - Updated with Individual/Team toggle and sharing
+// src/components/Leaderboard.jsx - FIXED: Updated to use separate team scores from session
 import React, { useState, useEffect } from "react";
 import {
   Trophy,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
+import { SessionService } from "../services/sessionService";
 
 const Leaderboard = ({ scoringCategories }) => {
   const { currentSession } = useSession();
@@ -26,64 +27,43 @@ const Leaderboard = ({ scoringCategories }) => {
   const [sortBy, setSortBy] = useState("score");
   const [viewMode, setViewMode] = useState("individual"); // 'individual' or 'team'
   const [participants, setParticipants] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [teamScores, setTeamScores] = useState({});
   const [loading, setLoading] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const participantService = new ParticipantService();
+  const sessionService = new SessionService();
 
-  // Load participants when session changes
+  // Load participants and team scores when session changes
   useEffect(() => {
     if (currentSession?.id) {
       setLoading(true);
       const unsubscribe = participantService.subscribeToSessionParticipants(
         currentSession.id,
-        (updatedParticipants) => {
+        async (updatedParticipants) => {
           setParticipants(updatedParticipants);
+          
+          // Get team list
+          const teamData = await participantService.getSessionTeams(currentSession.id);
+          setTeams(teamData);
+          
+          // Load team scores from session document
+          const scores = await sessionService.getTeamScores(currentSession.id);
+          setTeamScores(scores);
+          
           setLoading(false);
         }
       );
       return () => unsubscribe();
     } else {
       setParticipants([]);
+      setTeams([]);
+      setTeamScores({});
       setLoading(false);
     }
   }, [currentSession?.id]);
-
-  // Calculate team scores
-  const calculateTeams = () => {
-    const teamMap = new Map();
-
-    participants.forEach((participant) => {
-      if (participant.team) {
-        if (!teamMap.has(participant.team)) {
-          teamMap.set(participant.team, {
-            name: participant.team,
-            members: [],
-            totalScore: 0,
-            avgScore: 0,
-          });
-        }
-
-        const team = teamMap.get(participant.team);
-        team.members.push(participant);
-        team.totalScore += participant.totalScore || 0;
-      }
-    });
-
-    const teamsArray = Array.from(teamMap.values()).map((team) => ({
-      ...team,
-      avgScore:
-        team.members.length > 0
-          ? Math.round(team.totalScore / team.members.length)
-          : 0,
-      memberCount: team.members.length,
-    }));
-
-    return teamsArray;
-  };
-
-  const teams = calculateTeams();
 
   // Sort function for individuals
   const getSortedParticipants = () => {
@@ -108,9 +88,13 @@ const Leaderboard = ({ scoringCategories }) => {
     return sorted;
   };
 
-  // Sort function for teams
+  // Sort function for teams - FIXED: use teamScores from session
   const getSortedTeams = () => {
-    let sorted = [...teams];
+    let sorted = teams.map(team => ({
+      ...team,
+      totalScore: teamScores[team.name]?.totalScore || 0,
+      scores: teamScores[team.name]?.scores || {}
+    }));
 
     switch (sortBy) {
       case "score":
@@ -367,7 +351,7 @@ const Leaderboard = ({ scoringCategories }) => {
                   )}
                 </div>
                 <p className="text-xs md:text-sm text-gray-600">
-                  {team.memberCount} members • Avg: {team.avgScore} pts
+                  {team.memberCount} members
                 </p>
               </div>
             </div>

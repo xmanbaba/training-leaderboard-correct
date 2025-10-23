@@ -1,4 +1,4 @@
-// src/components/Teams.jsx - Team management page
+// src/components/Teams.jsx - Fixed to use session teamScores like QuickScoring
 import React, { useState, useEffect } from "react";
 import {
   UsersRound,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useSession } from "../contexts/SessionContext";
 import { ParticipantService } from "../services/participantService";
+import { SessionService } from "../services/sessionService";
 import CreateTeamModal from "./CreateTeamModal";
 import EditTeamModal from "./EditTeamModal";
 
@@ -25,6 +26,7 @@ const Teams = ({ calculateLevel }) => {
   const { currentSession } = useSession();
   const [participants, setParticipants] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [teamScores, setTeamScores] = useState({}); // ✅ Add this
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("score");
   const [expandedTeam, setExpandedTeam] = useState(null);
@@ -34,6 +36,7 @@ const Teams = ({ calculateLevel }) => {
   const [loading, setLoading] = useState(true);
 
   const participantService = new ParticipantService();
+  const sessionService = new SessionService(); // ✅ Add this
 
   // Load participants and calculate teams
   useEffect(() => {
@@ -41,9 +44,21 @@ const Teams = ({ calculateLevel }) => {
       setLoading(true);
       const unsubscribe = participantService.subscribeToSessionParticipants(
         currentSession.id,
-        (updatedParticipants) => {
+        async (updatedParticipants) => {
           setParticipants(updatedParticipants);
           calculateTeams(updatedParticipants);
+
+          // ✅ Also load team scores from session
+          try {
+            const scores = await sessionService.getTeamScores(
+              currentSession.id
+            );
+            setTeamScores(scores || {});
+          } catch (error) {
+            console.error("Error loading team scores:", error);
+            setTeamScores({});
+          }
+
           setLoading(false);
         }
       );
@@ -51,6 +66,7 @@ const Teams = ({ calculateLevel }) => {
     } else {
       setParticipants([]);
       setTeams([]);
+      setTeamScores({});
       setLoading(false);
     }
   }, [currentSession?.id]);
@@ -64,14 +80,14 @@ const Teams = ({ calculateLevel }) => {
           teamMap.set(participant.team, {
             name: participant.team,
             members: [],
-            totalScore: 0,
+            participantScoreTotal: 0, // ✅ Renamed from totalScore
             avgScore: 0,
           });
         }
 
         const team = teamMap.get(participant.team);
         team.members.push(participant);
-        team.totalScore += participant.totalScore || 0;
+        team.participantScoreTotal += participant.totalScore || 0; // ✅ Keep track of participant scores
       }
     });
 
@@ -79,7 +95,7 @@ const Teams = ({ calculateLevel }) => {
       ...team,
       avgScore:
         team.members.length > 0
-          ? Math.round(team.totalScore / team.members.length)
+          ? Math.round(team.participantScoreTotal / team.members.length)
           : 0,
       memberCount: team.members.length,
     }));
@@ -118,27 +134,42 @@ const Teams = ({ calculateLevel }) => {
     }
   };
 
+  // ✅ FIXED: Use session teamScores for team totals
+  const teamsWithScores = teams.map((team) => ({
+    ...team,
+    // Use team-specific score from session if available, otherwise use sum of participant scores
+    totalScore:
+      teamScores[team.name]?.totalScore || team.participantScoreTotal || 0,
+  }));
+
   // Filter and sort teams
-  let filteredTeams = teams.filter((team) =>
+  let filteredTeams = (teamsWithScores || []).filter((team) =>
     team.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   filteredTeams = filteredTeams.sort((a, b) => {
     switch (sortBy) {
       case "name":
-        return a.name.localeCompare(b.name);
+        return (a.name || "").localeCompare(b.name || "");
       case "members":
-        return b.memberCount - a.memberCount;
+        return (b.memberCount || 0) - (a.memberCount || 0);
       case "score":
       default:
-        return b.totalScore - a.totalScore;
+        return (b.totalScore || 0) - (a.totalScore || 0);
     }
   });
 
   const unassignedParticipants = participants.filter((p) => !p.team);
-  const totalTeams = teams.length;
+  const totalTeams = (teams || []).length;
   const totalAssigned = participants.filter((p) => p.team).length;
-  const winningTeam = teams.sort((a, b) => b.totalScore - a.totalScore)[0];
+
+  // ✅ FIXED: Use session teamScores for winning team
+  const winningTeam =
+    (teamsWithScores || []).length > 0
+      ? [...(teamsWithScores || [])].sort(
+          (a, b) => (b.totalScore || 0) - (a.totalScore || 0)
+        )[0]
+      : null;
 
   const StatsCard = ({
     icon: Icon,
@@ -179,6 +210,9 @@ const Teams = ({ calculateLevel }) => {
   };
 
   const TeamCard = ({ team, rank }) => {
+    // ✅ Add validation
+    if (!team) return null;
+
     const isExpanded = expandedTeam === team.name;
 
     const getRankStyle = () => {
@@ -186,6 +220,11 @@ const Teams = ({ calculateLevel }) => {
       if (rank <= 3) return "from-blue-400 to-blue-500";
       return "from-gray-400 to-gray-500";
     };
+
+    // ✅ Safely sort members
+    const sortedMembers = (team.members || []).sort(
+      (a, b) => (b.totalScore || 0) - (a.totalScore || 0)
+    );
 
     return (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300">
@@ -229,7 +268,7 @@ const Teams = ({ calculateLevel }) => {
                 </div>
               </div>
 
-              {/* Score Display */}
+              {/* Score Display - ✅ Now shows session team score */}
               <div className="text-right flex-shrink-0">
                 <div
                   className={`inline-flex items-center px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold text-base md:text-lg ${
@@ -287,9 +326,8 @@ const Teams = ({ calculateLevel }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {team.members
-                .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-                .map((member, index) => (
+              {sortedMembers.length > 0 ? (
+                sortedMembers.map((member) => (
                   <div
                     key={member.id}
                     className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200"
@@ -317,7 +355,12 @@ const Teams = ({ calculateLevel }) => {
                       {member.totalScore || 0}
                     </div>
                   </div>
-                ))}
+                ))
+              ) : (
+                <p className="col-span-full text-center text-gray-500 text-sm py-4">
+                  No members in this team
+                </p>
+              )}
             </div>
           </div>
         )}

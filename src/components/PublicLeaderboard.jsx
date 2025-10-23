@@ -1,4 +1,4 @@
-// src/components/PublicLeaderboard.jsx - Clean text-based PDF
+// src/components/PublicLeaderboard.jsx - FIXED: Updated to use separate team scores from session
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -23,6 +23,8 @@ const PublicLeaderboard = () => {
   const { sessionId } = useParams();
   const [session, setSession] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [teamScores, setTeamScores] = useState({});
   const [viewMode, setViewMode] = useState("individual");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -39,8 +41,17 @@ const PublicLeaderboard = () => {
     if (sessionId) {
       const unsubscribe = participantService.subscribeToSessionParticipants(
         sessionId,
-        (updatedParticipants) => {
+        async (updatedParticipants) => {
           setParticipants(updatedParticipants);
+          
+          // Get team list
+          const teamData = await participantService.getSessionTeams(sessionId);
+          setTeams(teamData);
+          
+          // Load team scores from session document
+          const scores = await sessionService.getTeamScores(sessionId);
+          setTeamScores(scores);
+          
           setLoading(false);
         }
       );
@@ -61,45 +72,16 @@ const PublicLeaderboard = () => {
     }
   };
 
-  const calculateTeams = () => {
-    const teamMap = new Map();
-
-    participants.forEach((participant) => {
-      if (participant.team) {
-        if (!teamMap.has(participant.team)) {
-          teamMap.set(participant.team, {
-            name: participant.team,
-            members: [],
-            totalScore: 0,
-            avgScore: 0,
-          });
-        }
-
-        const team = teamMap.get(participant.team);
-        team.members.push(participant);
-        team.totalScore += participant.totalScore || 0;
-      }
-    });
-
-    const teamsArray = Array.from(teamMap.values()).map((team) => ({
-      ...team,
-      avgScore:
-        team.members.length > 0
-          ? Math.round(team.totalScore / team.members.length)
-          : 0,
-      memberCount: team.members.length,
-    }));
-
-    return teamsArray;
-  };
-
-  const teams = calculateTeams();
-
   const sortedParticipants = [...participants].sort(
     (a, b) => (b.totalScore || 0) - (a.totalScore || 0)
   );
 
-  const sortedTeams = [...teams].sort((a, b) => b.totalScore - a.totalScore);
+  // FIXED: Use team scores from session instead of summing participant scores
+  const sortedTeams = teams.map(team => ({
+    ...team,
+    totalScore: teamScores[team.name]?.totalScore || 0,
+    scores: teamScores[team.name]?.scores || {}
+  })).sort((a, b) => b.totalScore - a.totalScore);
 
   const getRankIcon = (index) => {
     switch (index) {
@@ -215,7 +197,6 @@ const PublicLeaderboard = () => {
       pdf.text("Name", margin + 25, yPos);
       if (viewMode === "team") {
         pdf.text("Members", pageWidth - margin - 80, yPos);
-        pdf.text("Avg", pageWidth - margin - 45, yPos);
       }
       pdf.text("Score", pageWidth - margin - 15, yPos, { align: "right" });
 
@@ -261,11 +242,6 @@ const PublicLeaderboard = () => {
           pdf.text(
             item.memberCount?.toString() || "0",
             pageWidth - margin - 80,
-            yPos
-          );
-          pdf.text(
-            item.avgScore?.toString() || "0",
-            pageWidth - margin - 45,
             yPos
           );
         }
@@ -436,7 +412,7 @@ const PublicLeaderboard = () => {
                   {team.name}
                 </h3>
                 <p className="text-xs md:text-sm text-gray-600">
-                  {team.memberCount} members • Avg: {team.avgScore} pts
+                  {team.memberCount} members
                 </p>
               </div>
             </div>

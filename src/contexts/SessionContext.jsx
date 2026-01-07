@@ -149,21 +149,21 @@ export const SessionProvider = ({ children }) => {
       }
 
       // Auto-select most recent session if none selected
-      if (!currentSession && sessionsList.length > 0) {
-        const mostRecent = sessionsList.sort(
-          (a, b) =>
-            b.participantData.joinedAt?.toMillis() -
-            a.participantData.joinedAt?.toMillis()
-        )[0];
-        setCurrentSession(mostRecent);
-      }
-    } catch (err) {
-      console.error("Error loading sessions:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     if (!currentSession && sessionsList.length > 0) {
+  //       const mostRecent = sessionsList.sort(
+  //         (a, b) =>
+  //           b.participantData.joinedAt?.toMillis() -
+  //           a.participantData.joinedAt?.toMillis()
+  //       )[0];
+  //       setCurrentSession(mostRecent);
+  //     }
+  //   } catch (err) {
+  //     console.error("Error loading sessions:", err);
+  //     setError(err.message);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const selectSession = (sessionId) => {
     const session = sessions.find((s) => s.id === sessionId);

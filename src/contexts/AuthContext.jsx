@@ -22,20 +22,15 @@ export const AuthProvider = ({ children }) => {
 
 
   useEffect(() => {
-    // Check for redirect result first (for Google sign-in)
-    const checkRedirectResult = async () => {
-      try {
-        await authService.getRedirectResult();
-      } catch (err) {
-        console.error("Redirect result error:", err);
-      }
-    };
-    checkRedirectResult();
+    let unsubscribe;
 
-    // Set up auth state listener
-    useEffect(() => {
-      const unsubscribe = authService.onAuthStateChanged(
-        async (firebaseUser) => {
+    const initAuth = async () => {
+      try {
+        // Handle Google redirect (safe to await)
+        await authService.getRedirectResult();
+
+        // Subscribe to auth changes
+        unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
           try {
             setError(null);
 
@@ -52,15 +47,20 @@ export const AuthProvider = ({ children }) => {
           } finally {
             setAuthReady(true);
           }
-        }
-      );
+        });
+      } catch (err) {
+        console.error("Auth init error:", err);
+        setAuthReady(true);
+      }
+    };
 
-      return unsubscribe;
-    }, []);
+    initAuth();
 
-
-    return unsubscribe;
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
+
 
   // Sign up function
   const signUp = async (email, password, userData) => {

@@ -57,7 +57,7 @@ const ParticipantJoin = () => {
 
   const sessionService = new SessionService();
 
-  const totalSteps = user ? 2 : 3;
+  const totalSteps = 2;
   const isAuthenticated = !!user;
   
 useEffect(() => {
@@ -601,8 +601,7 @@ useEffect(() => {
         )}
 
         {/* Step 2/3: Profile Completion */}
-        {((step === 2 && isAuthenticated) ||
-          (step === 3 && !isAuthenticated)) && (
+        {step === 2 && (
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">

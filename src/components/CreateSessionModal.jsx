@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { SessionService } from "../services/sessionService";
 import { useAuth } from "../contexts/AuthContext";
+import { useSession } from "../contexts/SessionContext";
+import { useNavigate } from "react-router-dom";
 
 const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
   const { userProfile } = useAuth();
@@ -23,6 +25,8 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
   const [success, setSuccess] = useState("");
   const [activeStep, setActiveStep] = useState(1);
   const [createdSession, setCreatedSession] = useState(null);
+  const { selectSession } = useSession();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -154,6 +158,10 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       setCreatedSession(newSession);
       setSuccess("Session created successfully!");
       setActiveStep(3);
+
+      // 🔥 THIS IS THE FIX
+      selectSession(newSession.id);
+      navigate(`/dashboard/${newSession.id}`);
 
       if (onSessionCreated) {
         onSessionCreated(newSession);

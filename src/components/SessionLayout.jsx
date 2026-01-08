@@ -30,7 +30,6 @@ const SessionLayout = () => {
   const { currentSession, sessions, selectSession, loading } = useSession();
   const sessionFromUrl = sessions.find((s) => s.id === sessionId);
 
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSessionDropdown, setShowSessionDropdown] = useState(false);
@@ -44,10 +43,15 @@ const SessionLayout = () => {
 
   // Load session when sessionId changes
   useEffect(() => {
-  if (sessionFromUrl && currentSession?.id !== sessionId) {
-    selectSession(sessionId);
-  }
-}, [sessionId, sessionFromUrl]);
+    if (!sessionId || sessions.length === 0) return;
+
+    if (!currentSession || currentSession.id !== sessionId) {
+      const match = sessions.find((s) => s.id === sessionId);
+      if (match) {
+        selectSession(sessionId);
+      }
+    }
+  }, [sessionId, sessions, currentSession, selectSession]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -190,28 +194,27 @@ const SessionLayout = () => {
   }
 
   if (!sessionFromUrl) {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
-        <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">
-          Session Not Found
-        </h2>
-        <p className="text-gray-600 mb-6">
-          The session you're trying to access doesn't exist or you don't have
-          permission to view it.
-        </p>
-        <button
-          onClick={() => navigate("/sessions")}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
-        >
-          View My Sessions
-        </button>
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
+          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Session Not Found
+          </h2>
+          <p className="text-gray-600 mb-6">
+            The session you're trying to access doesn't exist or you don't have
+            permission to view it.
+          </p>
+          <button
+            onClick={() => navigate("/sessions")}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
+          >
+            View My Sessions
+          </button>
+        </div>
       </div>
-    </div>
-  );
-}
-
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -355,6 +358,7 @@ const SessionLayout = () => {
                         <button
                           key={session.id}
                           onClick={() => {
+                            selectSession(session.id);
                             navigate(`/session/${session.id}/dashboard`);
                             setShowSessionDropdown(false);
                           }}

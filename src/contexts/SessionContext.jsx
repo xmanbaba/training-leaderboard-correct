@@ -30,9 +30,15 @@ export const SessionProvider = ({ children }) => {
   const { user } = useAuth();
 
   const [currentSession, setCurrentSession] = useState(null);
-  const [sessions, setSessions] = useState([]); // all sessions user is part of
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sessions, setSessions] = useState([]); // all sessions user is part of
+
+  const addSession = (session) => {
+  setSessions((prev) => [session, ...prev]);
+  setCurrentSession(session);
+};
+
 
   // Load user's sessions on mount/auth change
   useEffect(() => {
@@ -227,6 +233,8 @@ export const SessionProvider = ({ children }) => {
     error,
     selectSession,
     refreshCurrentSession,
+    addSession,
+    setSessions,
     clearSession,
     loadUserSessions,
     isSessionAdmin,

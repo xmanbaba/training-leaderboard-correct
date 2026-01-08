@@ -27,6 +27,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
   const [createdSession, setCreatedSession] = useState(null);
   const { selectSession } = useSession();
   const navigate = useNavigate();
+  const { setSessions, addSessions } = useSession();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -151,17 +152,19 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
       const newSession = await sessionService.createSession(
         sessionData,
         userProfile.uid,
-        userProfile // ADD THIS
+        userProfile
       );
+
+      // ✅ Inject immediately into context
+      addSession(newSession);
+
+      // ✅ Go to the correct route
+      navigate(`/session/${newSession.id}/dashboard`);
 
       console.log("Session created successfully:", newSession);
       setCreatedSession(newSession);
       setSuccess("Session created successfully!");
       setActiveStep(3);
-
-      // 🔥 THIS IS THE FIX
-      selectSession(newSession.id);
-      navigate(`/dashboard/${newSession.id}`);
 
       if (onSessionCreated) {
         onSessionCreated(newSession);

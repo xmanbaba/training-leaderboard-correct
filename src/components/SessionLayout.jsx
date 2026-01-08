@@ -193,6 +193,18 @@ const SessionLayout = () => {
     );
   }
 
+  if (!currentSession) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Preparing session...</p>
+      </div>
+    </div>
+  );
+}
+
+
   if (!sessionFromUrl) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -324,7 +336,7 @@ const SessionLayout = () => {
                   <Trophy className="h-5 w-5 text-blue-600" />
                   <div className="text-left hidden sm:block">
                     <div className="font-semibold text-gray-900 text-sm truncate max-w-48">
-                      {currentSession.name}
+                      {currentSession?.name}
                     </div>
                     <div className="text-xs text-gray-500">
                       {isSessionAdmin ? "Admin" : "Member"}
@@ -352,7 +364,7 @@ const SessionLayout = () => {
                             setShowSessionDropdown(false);
                           }}
                           className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
-                            currentSession.id === session.id ? "bg-blue-50" : ""
+                            currentSession?.id === session.id ? "bg-blue-50" : ""
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -462,14 +474,14 @@ const SessionLayout = () => {
             </div>
 
             <p className="text-sm text-gray-600 mb-4">
-              Share this link with participants to join {currentSession.name}
+              Share this link with participants to join {currentSession?.name}
             </p>
 
             {/* Join Code Display */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-4">
               <div className="text-xs text-gray-600 mb-1">Join Code</div>
               <div className="text-2xl font-bold text-blue-600 tracking-wider">
-                {currentSession.joinCode}
+                {currentSession?.joinCode}
               </div>
             </div>
 

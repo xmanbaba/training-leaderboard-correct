@@ -27,7 +27,7 @@ const CreateSessionModal = ({ isOpen, onClose, onSessionCreated }) => {
   const [createdSession, setCreatedSession] = useState(null);
   const { selectSession } = useSession();
   const navigate = useNavigate();
-  const { setSessions, addSessions } = useSession();
+  const { setSessions, addSession } = useSession();
 
   const [formData, setFormData] = useState({
     name: "",

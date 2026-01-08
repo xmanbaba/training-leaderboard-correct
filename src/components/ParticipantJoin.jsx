@@ -59,14 +59,6 @@ const ParticipantJoin = () => {
 
   const totalSteps = user ? 2 : 3;
   const isAuthenticated = !!user;
-
-  useEffect(() => {
-    if (user && session) {
-      // User is now fully authenticated
-      setStep(3);
-    }
-  }, [user, session]);
-
   
 useEffect(() => {
   if (authReady && user && session) {

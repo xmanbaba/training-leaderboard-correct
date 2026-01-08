@@ -35,7 +35,7 @@ import {
 const ParticipantJoin = () => {
   const { joinCode } = useParams();
   const navigate = useNavigate();
-  const { user, userProfile, signUp, signIn } = useAuth();
+  const { user, authReady, userProfile, signUp, signIn } = useAuth();
   const { loadUserSessions } = useSession();
 
   const [session, setSession] = useState(null);
@@ -59,6 +59,21 @@ const ParticipantJoin = () => {
 
   const totalSteps = user ? 2 : 3;
   const isAuthenticated = !!user;
+
+  useEffect(() => {
+    if (user && session) {
+      // User is now fully authenticated
+      setStep(3);
+    }
+  }, [user, session]);
+
+  
+useEffect(() => {
+  if (authReady && user && session) {
+    setStep(3);
+  }
+}, [authReady, user, session]);
+
 
   useEffect(() => {
     loadSession();
@@ -147,7 +162,7 @@ const ParticipantJoin = () => {
         });
 
         console.log("Account created successfully");
-        setStep(3);
+        // setStep(3);
       } catch (err) {
         console.error("Sign up error:", err);
         setError(err.message);
@@ -163,7 +178,7 @@ const ParticipantJoin = () => {
         await signIn(formData.email, formData.password);
 
         console.log("Signed in successfully");
-        setStep(3);
+        // setStep(3);
       } catch (err) {
         console.error("Sign in error:", err);
         setError(err.message);
@@ -182,7 +197,7 @@ const ParticipantJoin = () => {
     }
 
     if (!user) {
-      setError("Please sign in first");
+      // setError("Please sign in first");
       return;
     }
 
@@ -238,9 +253,7 @@ const ParticipantJoin = () => {
       setSuccess(true);
 
       // Redirect to session dashboard
-      setTimeout(() => {
-        navigate(`/session/${session.id}/dashboard`);
-      }, 2000);
+      navigate(`/session/${session.id}/dashboard`, { replace: true });
     } catch (err) {
       console.error("Error joining session:", err);
       setError(err.message || "Failed to join session");
@@ -688,7 +701,7 @@ const ParticipantJoin = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={joining}
+                    disabled={joining || !authReady}
                     className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center"
                   >
                     {joining ? (

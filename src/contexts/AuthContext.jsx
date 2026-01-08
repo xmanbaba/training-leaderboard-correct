@@ -17,6 +17,9 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+
 
   useEffect(() => {
     // Check for redirect result first (for Google sign-in)
@@ -30,27 +33,31 @@ export const AuthProvider = ({ children }) => {
     checkRedirectResult();
 
     // Set up auth state listener
-    const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
-      try {
-        setError(null);
+    useEffect(() => {
+      const unsubscribe = authService.onAuthStateChanged(
+        async (firebaseUser) => {
+          try {
+            setError(null);
 
-        if (firebaseUser) {
-          setUser(firebaseUser);
-
-          // Fetch user profile from Firestore
-          const profile = await userService.getUser(firebaseUser.uid);
-          setUserProfile(profile);
-        } else {
-          setUser(null);
-          setUserProfile(null);
+            if (firebaseUser) {
+              setUser(firebaseUser);
+              const profile = await userService.getUser(firebaseUser.uid);
+              setUserProfile(profile);
+            } else {
+              setUser(null);
+              setUserProfile(null);
+            }
+          } catch (err) {
+            setError(err.message);
+          } finally {
+            setAuthReady(true);
+          }
         }
-      } catch (err) {
-        console.error("Auth state change error:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    });
+      );
+
+      return unsubscribe;
+    }, []);
+
 
     return unsubscribe;
   }, []);
@@ -59,31 +66,20 @@ export const AuthProvider = ({ children }) => {
   const signUp = async (email, password, userData) => {
     try {
       setError(null);
-      setLoading(true);
-
-      const user = await authService.register(email, password, userData);
-      return user;
-    } catch (err) {
-      setError(err.message);
-      throw err;
+      setAuthLoading(true);
+      return await authService.register(email, password, userData);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
     }
   };
 
-  // Sign in function
   const signIn = async (email, password) => {
     try {
       setError(null);
-      setLoading(true);
-
-      const user = await authService.signIn(email, password);
-      return user;
-    } catch (err) {
-      setError(err.message);
-      throw err;
+      setAuthLoading(true);
+      return await authService.signIn(email, password);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
     }
   };
 
@@ -175,7 +171,8 @@ export const AuthProvider = ({ children }) => {
     // State
     user,
     userProfile,
-    loading,
+    authReady,
+    authLoading,
     error,
 
     // Auth functions

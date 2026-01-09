@@ -1,4 +1,4 @@
-// src/components/ParticipantJoin.jsx - Fixed to create sessionParticipants
+// src/components/ParticipantJoin.jsx - Fixed step progression
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -59,13 +59,12 @@ const ParticipantJoin = () => {
 
   const totalSteps = 2;
   const isAuthenticated = !!user;
-  
-useEffect(() => {
-  if (authReady && user && session) {
-    setStep(3);
-  }
-}, [authReady, user, session]);
 
+  useEffect(() => {
+    if (authReady && user && session) {
+      setStep(2); // Changed from 3 to 2 - profile completion is step 2
+    }
+  }, [authReady, user, session]);
 
   useEffect(() => {
     loadSession();
@@ -122,11 +121,7 @@ useEffect(() => {
   };
 
   const handleNextFromStep1 = () => {
-    if (isAuthenticated) {
-      setStep(2);
-    } else {
-      setStep(2);
-    }
+    setStep(2);
   };
 
   const handleAccountCreation = async (e) => {
@@ -154,7 +149,8 @@ useEffect(() => {
         });
 
         console.log("Account created successfully");
-        // setStep(3);
+        // Step will be updated by useEffect when user state changes
+        // No need to manually set step here
       } catch (err) {
         console.error("Sign up error:", err);
         setError(err.message);
@@ -170,7 +166,8 @@ useEffect(() => {
         await signIn(formData.email, formData.password);
 
         console.log("Signed in successfully");
-        // setStep(3);
+        // Step will be updated by useEffect when user state changes
+        // No need to manually set step here
       } catch (err) {
         console.error("Sign in error:", err);
         setError(err.message);
@@ -189,7 +186,6 @@ useEffect(() => {
     }
 
     if (!user) {
-      // setError("Please sign in first");
       return;
     }
 
@@ -353,10 +349,7 @@ useEffect(() => {
                   Session Info
                 </span>
                 <span className={step >= 2 ? "text-blue-600 font-medium" : ""}>
-                  Account
-                </span>
-                <span className={step >= 3 ? "text-blue-600 font-medium" : ""}>
-                  Complete Profile
+                  Account / Profile
                 </span>
               </div>
             )}
@@ -449,263 +442,262 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Step 2: Account Creation/Login */}
-        {step === 2 && !isAuthenticated && (
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                Create Account or Sign In
-              </h2>
-
-              <div className="mb-6">
-                <div className="flex bg-gray-100 rounded-lg p-1">
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange("hasAccount", false)}
-                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                      !formData.hasAccount
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    Create New Account
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange("hasAccount", true)}
-                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                      formData.hasAccount
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    I Have An Account
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleAccountCreation} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <input
-                      type="email"
-                      required
-                      value={formData.email}
-                      onChange={(e) =>
-                        handleInputChange("email", e.target.value)
-                      }
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="your.email@example.com"
-                    />
-                  </div>
-                </div>
-
-                {!formData.hasAccount && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Full Name
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                      <input
-                        type="text"
-                        required
-                        value={formData.name}
-                        onChange={(e) =>
-                          handleInputChange("name", e.target.value)
-                        }
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="John Doe"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.password}
-                    onChange={(e) =>
-                      handleInputChange("password", e.target.value)
-                    }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter your password"
-                    minLength={6}
-                  />
-                </div>
-
-                {!formData.hasAccount && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Confirm Password
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={formData.confirmPassword}
-                      onChange={(e) =>
-                        handleInputChange("confirmPassword", e.target.value)
-                      }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Confirm your password"
-                      minLength={6}
-                    />
-                  </div>
-                )}
-
-                {error && (
-                  <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">{error}</span>
-                  </div>
-                )}
-
-                <div className="flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-xl transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={joining}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center"
-                  >
-                    {joining ? (
-                      <>
-                        <Loader className="animate-spin h-4 w-4 mr-2" />
-                        {formData.hasAccount
-                          ? "Signing In..."
-                          : "Creating Account..."}
-                      </>
-                    ) : formData.hasAccount ? (
-                      "Sign In & Continue"
-                    ) : (
-                      "Create Account & Continue"
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2/3: Profile Completion */}
+        {/* Step 2: Combined Account & Profile */}
         {step === 2 && (
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                Complete Your Profile
-              </h2>
+              {!isAuthenticated ? (
+                <>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                    Create Account or Sign In
+                  </h2>
 
-              <form onSubmit={handleJoinSession} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Name *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) =>
-                        handleInputChange("name", e.target.value)
-                      }
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="John Doe"
-                    />
+                  <div className="mb-6">
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange("hasAccount", false)}
+                        className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                          !formData.hasAccount
+                            ? "bg-white text-blue-600 shadow-sm"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Create New Account
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange("hasAccount", true)}
+                        className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                          formData.hasAccount
+                            ? "bg-white text-blue-600 shadow-sm"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        I Have An Account
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) =>
-                        handleInputChange("phone", e.target.value)
-                      }
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="+1 (555) 123-4567"
-                    />
-                  </div>
-                </div>
+                  <form onSubmit={handleAccountCreation} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email Address
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                        <input
+                          type="email"
+                          required
+                          value={formData.email}
+                          onChange={(e) =>
+                            handleInputChange("email", e.target.value)
+                          }
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="your.email@example.com"
+                        />
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Department/Role
-                  </label>
-                  <div className="relative">
-                    <Building className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.department}
-                      onChange={(e) =>
-                        handleInputChange("department", e.target.value)
-                      }
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Engineering, Marketing, etc."
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">
-                    Joining: {session?.name}
-                  </h4>
-                  <p className="text-sm text-blue-700">
-                    You're about to join this session. You'll receive points for
-                    participation and can track your progress on the
-                    leaderboard!
-                  </p>
-                </div>
-
-                {error && (
-                  <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">{error}</span>
-                  </div>
-                )}
-
-                <div className="flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setStep(isAuthenticated ? 1 : 2)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-xl transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={joining || !authReady}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center"
-                  >
-                    {joining ? (
-                      <>
-                        <Loader className="animate-spin h-4 w-4 mr-2" />
-                        Joining Session...
-                      </>
-                    ) : (
-                      "Join Session 🚀"
+                    {!formData.hasAccount && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Full Name
+                        </label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                          <input
+                            type="text"
+                            required
+                            value={formData.name}
+                            onChange={(e) =>
+                              handleInputChange("name", e.target.value)
+                            }
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="John Doe"
+                          />
+                        </div>
+                      </div>
                     )}
-                  </button>
-                </div>
-              </form>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={formData.password}
+                        onChange={(e) =>
+                          handleInputChange("password", e.target.value)
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your password"
+                        minLength={6}
+                      />
+                    </div>
+
+                    {!formData.hasAccount && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Confirm Password
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={formData.confirmPassword}
+                          onChange={(e) =>
+                            handleInputChange("confirmPassword", e.target.value)
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Confirm your password"
+                          minLength={6}
+                        />
+                      </div>
+                    )}
+
+                    {error && (
+                      <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                        <span className="text-sm">{error}</span>
+                      </div>
+                    )}
+
+                    <div className="flex space-x-3">
+                      <button
+                        type="button"
+                        onClick={() => setStep(1)}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-xl transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={joining}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center"
+                      >
+                        {joining ? (
+                          <>
+                            <Loader className="animate-spin h-4 w-4 mr-2" />
+                            {formData.hasAccount
+                              ? "Signing In..."
+                              : "Creating Account..."}
+                          </>
+                        ) : formData.hasAccount ? (
+                          "Sign In & Continue"
+                        ) : (
+                          "Create Account & Continue"
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                    Complete Your Profile
+                  </h2>
+
+                  <form onSubmit={handleJoinSession} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Full Name *
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                        <input
+                          type="text"
+                          required
+                          value={formData.name}
+                          onChange={(e) =>
+                            handleInputChange("name", e.target.value)
+                          }
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="John Doe"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone Number
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                        <input
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) =>
+                            handleInputChange("phone", e.target.value)
+                          }
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="+1 (555) 123-4567"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Department/Role
+                      </label>
+                      <div className="relative">
+                        <Building className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={formData.department}
+                          onChange={(e) =>
+                            handleInputChange("department", e.target.value)
+                          }
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Engineering, Marketing, etc."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <h4 className="font-medium text-blue-900 mb-2">
+                        Joining: {session?.name}
+                      </h4>
+                      <p className="text-sm text-blue-700">
+                        You're about to join this session. You'll receive points
+                        for participation and can track your progress on the
+                        leaderboard!
+                      </p>
+                    </div>
+
+                    {error && (
+                      <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                        <span className="text-sm">{error}</span>
+                      </div>
+                    )}
+
+                    <div className="flex space-x-3">
+                      <button
+                        type="button"
+                        onClick={() => setStep(1)}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-xl transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={joining || !authReady}
+                        className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center"
+                      >
+                        {joining ? (
+                          <>
+                            <Loader className="animate-spin h-4 w-4 mr-2" />
+                            Joining Session...
+                          </>
+                        ) : (
+                          "Join Session 🚀"
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
             </div>
           </div>
         )}
